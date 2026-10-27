@@ -1,6 +1,6 @@
 # Skerry
 
-![Skerry](src/assets/skerry-keyart.webp)
+![Skerry](docs/skerry-titelbild.jpg)
 
 **Deutsch** · [English](#english)
 
@@ -31,7 +31,7 @@ npm run app:mac    # Mac-App nach release/ (app:win für Windows)
 
 - Spielidee, Game Design und Spieltests: **Christian Weikert**
 - Programmierung und 3D-Modelle: **Claude** (Anthropic), nach den Vorgaben von Christian Weikert; die Modelle entstehen über Python-Skripte in Blender (`art/`)
-- Titelbild, Logo und Musik („The Iron Monolith“): KI-generiert mit **Gemini** (Google)
+- Logo und Musik („The Iron Monolith“): KI-generiert mit **Gemini** (Google); das Titelbild dieser Seite mit **OpenAI**
 - Stimme des Bordcomputers: erzeugt mit **ElevenLabs**
 - Klänge: Aufnahmen von BigSoundBank (Joseph Sardin) und Kenney, gemeinfrei (CC0), Quellen in `src/assets/sfx/QUELLEN.md`; Laser, Motoren, Wind und Meer entstehen im Spiel selbst
 - Software: three.js und lil-gui (MIT), als App mit Electron
@@ -69,7 +69,7 @@ npm run app:mac    # Mac app to release/ (app:win for Windows)
 
 - Game idea, game design and play testing: **Christian Weikert**
 - Programming and 3D models: **Claude** (Anthropic), directed by Christian Weikert; the models are built by Python scripts in Blender (`art/`)
-- Key art, logo and music (“The Iron Monolith”): AI-generated with **Gemini** (Google)
+- Logo and music (“The Iron Monolith”): AI-generated with **Gemini** (Google); the picture at the top of this page with **OpenAI**
 - Ship computer voice: made with **ElevenLabs**
 - Sounds: recordings by BigSoundBank (Joseph Sardin) and Kenney, public domain (CC0), sources in `src/assets/sfx/QUELLEN.md`; lasers, engines, wind and sea are synthesised in the game
 - Software: three.js and lil-gui (MIT), as an app with Electron
