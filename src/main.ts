@@ -39,7 +39,7 @@ import { HAMMERHEAD } from './game/arsenal';
 import { ShipTop } from './game/shipTop';
 import { Wrecks } from './world/wrecks';
 import { CRUISE_STEPS, Walrus } from './game/walrus';
-import { LIFT_SPEED, Manta, MANTA_KEYS, MIN_SPEED, type Pad } from './game/manta';
+import { LIFT_SPEED, Manta, MANTA_KEYBOARD, MANTA_KEYS, MIN_SPEED, type Pad } from './game/manta';
 import { PAD_TOP } from './models/buildings';
 import { Drone, DRONE_PACES, DRONE_RANGE } from './game/drone';
 import { UnitPilots } from './game/autopilot';
@@ -965,10 +965,6 @@ function handleKeys(dt: number) {
   if (input.hit('KeyP', 'Pad.Start')) { pause(); return; }
   if (input.hit('KeyT')) params.zeitLaeuft = !params.zeitLaeuft;
   if (input.hit('KeyZ')) params.zeitraffer = params.zeitraffer === 1 ? 4 : params.zeitraffer === 4 ? 10 : 1;
-  const names = Object.keys(WEATHER_LABELS);
-  for (let i = 1; i <= 4; i++) {
-    if (input.hit(`Digit${i}`)) { params.wetter = names[i - 1]; env.setWeather(WEATHER_LABELS[params.wetter]); weather.restart(); }
-  }
   const shift = input.down('ShiftLeft', 'ShiftRight') ? -1 : 1;
   const camStep = input.hit('KeyC') ? shift : pad && input.hit('Pad.Y') ? 1 : 0;
   if (camStep) nextCamera(camStep);
@@ -1068,10 +1064,11 @@ function pointerHelp(): string {
 /** the player's Skua with climb and dive turned round, if so set (every device: keys, pad, trackpad) */
 function skuaInput(inp: InputLike): InputLike {
   if (!input.settings.invertPitch) return inp;
+  const turned = (n: string[], p: string[]) => (n === MANTA_KEYS.noseDown && p === MANTA_KEYS.noseUp) || (n === MANTA_KEYBOARD.noseDown && p === MANTA_KEYBOARD.noseUp);
   return {
     down: (...c) => inp.down(...c),
     hit: (...c) => inp.hit(...c),
-    axis: (n, p) => (n === MANTA_KEYS.noseDown && p === MANTA_KEYS.noseUp ? inp.axis(p, n) : inp.axis(n, p)),
+    axis: (n, p) => (turned(n, p) ? inp.axis(p, n) : inp.axis(n, p)),
   };
 }
 
@@ -2014,7 +2011,12 @@ function updateSound(dt: number) {
   sound.listener(camera);
   const toCarrier = camera.position.distanceTo(carrier.pos);
   const onCarrier = !params.entwickler && cams.current?.group === 'Träger';
+  // in the Skua's cockpit or the Otter's cab the outside comes muffled through the glass, and its own engine is loud
+  const cabId = started && !params.entwickler ? cams.current?.id : undefined;
+  const cab = cabId === 'manta-cockpit' ? 'manta' : cabId === 'walrus-fahrer' ? 'walrus' : null;
+  sound.cabin(cab !== null);
   sound.enginesUpdate({
+    cab,
     carrierSpeed: Math.min(1, Math.abs(carrier.speed) / 20) + Math.max(0, Math.abs(carrier.speed) - 20) / 40,
     carrierNear: onCarrier ? 1 : THREE.MathUtils.clamp(1 - (toCarrier - 150) / 1400, 0, 1),
     walrus: { on: walrus.state !== 'dock' && walrus.state !== 'zerstoert', rpm: Math.min(1, Math.abs(walrus.speed) / 12), pos: walrus.pos },

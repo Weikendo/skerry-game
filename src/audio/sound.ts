@@ -39,6 +39,9 @@ const FORGED = new Map(FORGE_KINDS.map(f => [f.kind, f.seconds]));
 /** seconds for sea, wind and rain to swell in when the sound first starts */
 const AMBIENCE_FADE_IN = 6;
 
+/** how much louder a unit's own engine is from inside its cab (about +5 dB) */
+const CAB_ENGINE = 1.8;
+
 /**
  * The game's sound (Web Audio): sea, wind, rain and thunder, the engines and UI blips are synthesised as they play;
  * explosions, shells, splashes and fire mix recordings (CC0) with synthesis, a little different every time. Lasers,
@@ -54,6 +57,9 @@ export class SoundEngine {
   private bus!: { effects: GainNode; ambience: GainNode; engines: GainNode; voice: GainNode };
   /** effects and engines pass through this, to step back while the voice speaks */
   private duckNode!: GainNode;
+  /** the weather and the sea as heard from inside a cab: through the glass, muffled and quieter (cabin()) */
+  private muffle!: BiquadFilterNode;
+  private muffleGain!: GainNode;
   private white!: AudioBuffer;
   private brown!: AudioBuffer;
   private voices = 0;
@@ -123,7 +129,9 @@ export class SoundEngine {
     this.duckNode.connect(this.master);
     this.bus.effects.connect(this.duckNode);
     this.bus.engines.connect(this.duckNode);
-    this.bus.ambience.connect(this.master);
+    this.muffle = ctx.createBiquadFilter(); this.muffle.type = 'lowpass'; this.muffle.frequency.value = 20000; this.muffle.Q.value = 0.7;
+    this.muffleGain = ctx.createGain();
+    this.bus.ambience.connect(this.muffle).connect(this.muffleGain).connect(this.master);
     this.bus.voice.connect(this.master);
     this.white = this.noiseBuffer('white');
     this.brown = this.noiseBuffer('brown');
@@ -543,20 +551,31 @@ export class SoundEngine {
     this.engines = { carrier, walrus, manta, drohne };
   }
 
-  /** levels 0..1; positions in world space; carrierNear 0..1 (how close the camera is to the ship) */
+  /** the camera sits in a cab (the Skua's cockpit, the Otter's): the weather and the sea come muffled through the glass */
+  cabin(inside: boolean) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.muffle.frequency.setTargetAtTime(inside ? 1100 : 20000, t, 0.15);
+    this.muffleGain.gain.setTargetAtTime(inside ? 0.5 : 1, t, 0.15);
+  }
+
+  /** levels 0..1; positions in world space; carrierNear 0..1 (how close the camera is to the ship); `cab`: the unit
+   *  whose cab the camera sits in (its own engine is loud there) */
   enginesUpdate(o: {
     carrierSpeed: number; carrierNear: number; walrus: { on: boolean; rpm: number; pos: THREE.Vector3 };
     manta: { on: boolean; thrust: number; pos: THREE.Vector3 }; drohne: { on: boolean; rpm: number; pos: THREE.Vector3 };
+    cab?: 'walrus' | 'manta' | null;
   }) {
     if (!this.ctx || !this.engines) return;
     const t = this.ctx.currentTime, e = this.engines;
+    const inCab = (u: 'walrus' | 'manta') => (o.cab === u ? CAB_ENGINE : 1);
     e.carrier.set({ speed: o.carrierSpeed });
     e.carrier.gain.gain.setTargetAtTime((0.03 + o.carrierSpeed * 0.06) * o.carrierNear, t, 0.3);
     e.walrus.set({ rpm: o.walrus.rpm });
-    e.walrus.gain.gain.setTargetAtTime(o.walrus.on ? 0.07 + o.walrus.rpm * 0.13 : 0, t, 0.15);
+    e.walrus.gain.gain.setTargetAtTime(o.walrus.on ? (0.07 + o.walrus.rpm * 0.13) * inCab('walrus') : 0, t, 0.15);
     this.place(e.walrus.panner!, o.walrus.pos);
     e.manta.set({ thrust: o.manta.thrust });
-    e.manta.gain.gain.setTargetAtTime(o.manta.on ? 0.14 + o.manta.thrust * 0.3 : 0, t, 0.2);
+    e.manta.gain.gain.setTargetAtTime(o.manta.on ? (0.14 + o.manta.thrust * 0.3) * inCab('manta') : 0, t, 0.2);
     this.place(e.manta.panner!, o.manta.pos);
     e.drohne.set({ rpm: o.drohne.rpm });
     e.drohne.gain.gain.setTargetAtTime(o.drohne.on ? 0.05 + o.drohne.rpm * 0.05 : 0, t, 0.15);

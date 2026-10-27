@@ -44,6 +44,16 @@ export const MANTA_KEYS = {
   left: ['KeyA', 'ArrowLeft', 'Pad.LX-', 'Ptr.X-'], right: ['KeyD', 'ArrowRight', 'Pad.LX+', 'Ptr.X+'],
   more: ['KeyR', 'Pad.RB'], less: ['KeyF', 'Pad.LB'], yawL: ['KeyQ', 'Pad.RX-'], yawR: ['KeyE', 'Pad.RX+'],
 };
+/**
+ * The keys alone (no stick, trackpad or autopilot): their steering builds up while held and eases back to neutral
+ * when let go (fly()), and flown by them a turn does not drop the nose.
+ */
+export const MANTA_KEYBOARD = {
+  noseDown: ['KeyW', 'ArrowUp'], noseUp: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
+  yawL: ['KeyQ'], yawR: ['KeyE'],
+};
+/** s a held key takes to full steering, and a released one back to neutral */
+const KEY_RAMP_UP = 0.8, KEY_RAMP_DOWN = 0.35;
 
 /**
  * Air defence fighter. Arcade flight model: bank angle makes the turn, pitch and
@@ -88,6 +98,10 @@ export class Manta implements Target {
   notice = '';
   /** last control inputs (moves the elevons and the rudder on the model) */
   readonly ctl = { pitch: 0, roll: 0, yaw: 0 };
+  /** the keys' steering as it builds up and eases off */
+  private keys = { pitch: 0, roll: 0, yaw: 0 };
+  /** flown by the keys (then a turn keeps the nose where it is), not by a stick, the trackpad or an autopilot */
+  private byKeys = false;
   state: MantaState = 'deck';
   readonly pos = new THREE.Vector3();
   readonly forward = new THREE.Vector3(0, 0, 1);
@@ -316,6 +330,7 @@ export class Manta implements Target {
       // off the ramp: hand over to the pilot, carrier speed adds to ours
       this.state = 'flug';
       this.sinceLaunch = 0;
+      this.keys = { pitch: 0, roll: 0, yaw: 0 };
       this.speed += Math.max(0, this.carrier.speed);
       this.pitch = 0.16;
       this.throttle = Math.max(this.throttle, 0.7);
@@ -324,10 +339,25 @@ export class Manta implements Target {
   }
 
   private fly(dt: number, input: InputLike | null) {
-    const k = MANTA_KEYS;
-    const pitchIn = input ? input.axis(k.noseDown, k.noseUp) : 0;
-    const rollIn = input ? input.axis(k.left, k.right) : 0;
-    const yawIn = input ? input.axis(k.yawR, k.yawL) : 0;
+    const k = MANTA_KEYS, kb = MANTA_KEYBOARD;
+    // the keys' steering builds up while held and eases back to neutral when let go; while it is at work it stands
+    // for the axis (a stick's, the trackpad's or an autopilot's otherwise)
+    const keyPitch = input ? input.axis(kb.noseDown, kb.noseUp) : 0, keyRoll = input ? input.axis(kb.left, kb.right) : 0;
+    const keyYaw = input ? input.axis(kb.yawR, kb.yawL) : 0;
+    const ease = (v: number, to: number) => {
+      const back = Math.abs(to) < Math.abs(v) || (v !== 0 && Math.sign(to) !== Math.sign(v));
+      const step = dt / (back ? KEY_RAMP_DOWN : KEY_RAMP_UP);
+      return v + THREE.MathUtils.clamp(to - v, -step, step);
+    };
+    this.keys.pitch = ease(this.keys.pitch, keyPitch);
+    this.keys.roll = ease(this.keys.roll, keyRoll);
+    this.keys.yaw = ease(this.keys.yaw, keyYaw);
+    const rollKeys = keyRoll !== 0 || this.keys.roll !== 0;
+    const pitchIn = keyPitch !== 0 || this.keys.pitch !== 0 ? this.keys.pitch : input ? input.axis(k.noseDown, k.noseUp) : 0;
+    const rollIn = rollKeys ? this.keys.roll : input ? input.axis(k.left, k.right) : 0;
+    const yawIn = keyYaw !== 0 || this.keys.yaw !== 0 ? this.keys.yaw : input ? input.axis(k.yawR, k.yawL) : 0;
+    if (keyPitch !== 0 || keyRoll !== 0 || keyYaw !== 0) this.byKeys = true;
+    else if ((pitchIn !== 0 && this.keys.pitch === 0) || (rollIn !== 0 && !rollKeys)) this.byKeys = false;
     this.ctl.pitch = pitchIn; this.ctl.roll = rollIn; this.ctl.yaw = yawIn;
     if (input) this.throttle = THREE.MathUtils.clamp(this.throttle + input.axis(k.less, k.more) * 0.5 * dt, 0, 1);
     // fuel burns with the throttle; an empty tank leaves only gliding (and stalling)
@@ -335,12 +365,12 @@ export class Manta implements Target {
     if (this.fuel <= 0) { this.throttle = 0; this.say(t('skua.fuelEmpty'), 0.5); }
     else if (this.fuel < 0.15) this.say(t('skua.fuelLow', { pct: pct(this.fuel) }), 0.5);
 
-    // bank: input rolls, otherwise the wings level themselves
+    // bank: input rolls, otherwise the wings level themselves (as the keys' steering eases off, they fade in)
     if (rollIn) this.bank = THREE.MathUtils.clamp(this.bank + rollIn * 1.7 * dt, -1.35, 1.35);
-    else this.bank *= Math.exp(-dt * 1.3);
+    if (!rollIn || rollKeys) this.bank *= Math.exp(-dt * 1.3 * (1 - Math.abs(rollIn)));
     this.pitch = THREE.MathUtils.clamp(this.pitch + pitchIn * 0.9 * dt, -1.2, 1.2);
-    // a banked wing lifts less: the nose sinks unless the pilot pulls
-    this.pitch -= (1 - Math.cos(this.bank)) * 0.3 * dt;
+    // a banked wing lifts less: the nose sinks unless the pilot pulls (flown by the keys a turn keeps the nose where it is)
+    if (!this.byKeys) this.pitch -= (1 - Math.cos(this.bank)) * 0.3 * dt;
 
     // coordinated turn
     this.yaw += (-G * Math.tan(this.bank) / Math.max(this.speed, 40) + yawIn * 0.25) * dt;

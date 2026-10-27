@@ -683,7 +683,7 @@ export const en = {
   'gui.clockRuns': 'Clock running (T)',
   'gui.tempo': 'Game minutes per second',
   'gui.timewarp': 'Time warp (Z)',
-  'gui.weather': 'Weather (1–4)',
+  'gui.weather': 'Weather',
   'gui.randomWeather': 'Random weather changes',
   'gui.bgPause': 'Pause when the window is in the background',
   'gui.unit': 'Unit (V)',

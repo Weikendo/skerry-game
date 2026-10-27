@@ -684,7 +684,7 @@ export const de = {
   'gui.clockRuns': 'Zeit läuft (T)',
   'gui.tempo': 'Spielminuten pro Sekunde',
   'gui.timewarp': 'Zeitraffer (Z)',
-  'gui.weather': 'Wetter (1–4)',
+  'gui.weather': 'Wetter',
   'gui.randomWeather': 'Wetter wechselt zufällig',
   'gui.bgPause': 'Pause, wenn das Fenster nicht vorn ist',
   'gui.unit': 'Einheit (V)',
