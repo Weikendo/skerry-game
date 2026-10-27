@@ -8,7 +8,8 @@ Skerry ist ein Strategie- und Actionspiel auf hoher See, eine Hommage an **Carri
 
 | | |
 |---|---|
-| ![Die Stoorworm](docs/screenshots/traeger.jpg) | ![Küste einer Schäre](docs/screenshots/kueste.jpg) |
+| ![Die Stoorworm in der Außenansicht](docs/screenshots/stoorworm.jpg) | ![Ein Otter fährt ins Heckdock](docs/screenshots/otter-heckdock.jpg) |
+| ![Aus der Skua im Anflug auf eine Insel](docs/screenshots/skua-insel.jpg) | ![Die Karte als Kommandopult](docs/screenshots/karte.jpg) |
 
 ## Spielen
 
@@ -47,6 +48,12 @@ Skerry ist ein inoffizielles Fan-Remake. Es ist kein Produkt der Rechteinhaber v
 ## English
 
 Skerry is a strategy and action game on the high seas, a homage to **Carrier Command** (1988). You command the unmanned aircraft carrier **Stoorworm** through an archipelago in the North Sea, capture islands with amphibious tanks (Otters) and VTOL jets (Skuas), build up a supply network and fight the rogue carrier **Nuckelavee** and its AI, Omega. All in real time, in a free-roaming low-poly 3D world with day and night, weather and a ship computer that talks.
+
+| | |
+|---|---|
+| ![The Stoorworm and an Otter seen from the drone](docs/screenshots/en-drone.jpg) | ![An Otter returning to the stern dock](docs/screenshots/en-otter-stern-dock.jpg) |
+
+![The map as the command table, with the stockpile island's delivery range](docs/screenshots/en-map.jpg)
 
 ### Playing
 

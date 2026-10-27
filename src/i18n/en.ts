@@ -460,7 +460,7 @@ export const en = {
   'credits.byline': 'A game by <b>Christian Weikert</b>',
   'credits.teamText': 'Concept, game design and playtesting: <b>Christian Weikert</b><br>Programming and 3D models: <b>Claude</b> (Anthropic), following Christian Weikert’s direction',
   'credits.art': 'Art and music',
-  'credits.artText': 'Title picture, logo and music (“The Iron Monolith”): AI-generated with <b>Gemini</b> (Google)',
+  'credits.artText': 'Logo and music (“The Iron Monolith”): AI-generated with <b>Gemini</b> (Google)',
   'credits.sounds': 'Sounds',
   'credits.soundsText': 'Recordings by <b>BigSoundBank</b> (Joseph Sardin, bigsoundbank.com) and <b>Kenney</b> (kenney.nl, “Impact Sounds”), both public domain (CC0). Lasers, engines, wind and sea are synthesised in the game. The ship computer’s voice was made with <b>ElevenLabs</b> (elevenlabs.io).',
   'credits.software': 'Software',
