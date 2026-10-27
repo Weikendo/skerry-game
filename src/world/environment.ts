@@ -219,9 +219,12 @@ export class Environment {
     // weather: greyer, darker sky and weaker direct light
     const grey = this.dayness();
     const overcast = clamp(w.cover * 0.55 + w.dark * 0.6, 0, 1);
+    // heavy rain washes the colour out of the sky, at sunset too
+    const wash = smoothstep(0.25, 0.7, w.rain) * 0.95;
     const stormTint = STORM_GREY.clone().multiplyScalar(lerp(0.25, 1, grey));
-    this.zenith.lerp(stormTint, overcast * 0.85);
-    this.horizon.lerp(stormTint.clone().lerp(FOG_GREY.clone().multiplyScalar(lerp(0.25, 1, grey)), 0.5), overcast * 0.75);
+    // (the horizon keeps a little of its light: the band of brightness under a heavy deck)
+    this.zenith.lerp(stormTint, Math.max(overcast * 0.85, wash));
+    this.horizon.lerp(stormTint.clone().lerp(FOG_GREY.clone().multiplyScalar(lerp(0.25, 1, grey)), 0.5), Math.max(overcast * 0.75, wash * 0.78));
     this.lightIntensity = lightI * w.sun;
     this.hemiIntensity *= lerp(1, 1.25, overcast);
     this.hemiSky.lerp(this.horizon, overcast * 0.6);
