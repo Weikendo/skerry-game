@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modell-Vergleich</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #bfe0fa; overflow: hidden; font: 13px -apple-system, sans-serif; color: #f2e6c8; }
+  canvas { display: block; }
+  .label { position: fixed; top: 14px; padding: 6px 12px; border-radius: 6px; background: rgba(10,14,20,.6); font-weight: 700; letter-spacing: .06em; }
+  #l1 { left: 25%; transform: translateX(-50%); } #l2 { left: 75%; transform: translateX(-50%); }
+  #split { position: fixed; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(10,14,20,.5); }
+  #hint { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 5px 12px; border-radius: 6px; background: rgba(10,14,20,.6); white-space: nowrap; }
+  #models { position: fixed; left: 12px; bottom: 12px; display: flex; gap: 6px; }
+  #models a, #views a { padding: 5px 10px; border-radius: 6px; background: rgba(10,14,20,.6); color: #f2e6c8; text-decoration: none; font-weight: 600; }
+  #models a.on, #views a.on { background: #c79b38; color: #1a1408; }
+  #views { position: fixed; right: 12px; bottom: 12px; display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="label" id="l1">BISHER · im Code gebaut</div>
+<div class="label" id="l2">NEU · in Blender gebaut</div>
+<div id="split"></div>
+<div id="hint"></div>
+<div id="models"></div>
+<div id="views"></div>
+<script type="module">
+// A model as the game shows it: the old one built in code (src/models/*.ts) beside the new one built in
+// Blender (art/<model>/<model>.glb), with the game's material, light, glow points and tone mapping.
+// ?model=otter|skua|stoorworm, ?view=front|rear|top|close|bridge, ?angle=…, ?light=noon|evening|morning|night,
+// ?lift=4.5 (Stoorworm: the lift that many metres down, a Skua on it)
+// The ship's camera views (Stoorworm: bridge, heck, aussen) show each half through that ship's own camera, with the
+// game's 55° field of view.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { buildWalrus } from '/src/models/walrus.ts';
+import { buildManta } from '/src/models/manta.ts';
+import { buildCarrier } from '/src/models/carrier.ts';
+import { lowPolyMaterial } from '/src/engine/lowpoly.ts';
+import { GlowSet } from '/src/engine/glow.ts';
+import { PAL } from '/src/engine/palette.ts';
+
+const SMALL_VIEWS = { front: [10, 9, 22], rear: [-12, 10, -22], top: [6, 26, 14], close: [7, 9, 13] };
+// the models: the old one, where the new one lies, how the game wraps it, the camera aim, the ground, the views
+const MODELS = {
+  otter: { name: 'Otter', old: () => buildWalrus('code'), glb: '../art/otter/otter.glb', scale: 1, lift: 0, aim: 3, views: SMALL_VIEWS },
+  skua: { name: 'Skua', old: () => buildManta('code'), glb: '../art/skua/skua.glb', scale: 0.75, lift: 2.4, aim: 2, views: SMALL_VIEWS },
+  // the Stoorworm from Blender beside the enemy's carrier, which is still built in code
+  stoorworm: {
+    name: 'Stoorworm', labels: ['GEGNER · im Code gebaut', 'STOORWORM · in Blender gebaut'],
+    old: () => buildCarrier('feind'), glb: '../art/stoorworm/stoorworm.glb', scale: 1, lift: 0, aim: 4,
+    ground: { y: -20, color: '#36bccb', size: 4000 }, shadow: 230, far: 6000,
+    views: { front: [230, 120, 330], rear: [-230, 130, -330], top: [60, 420, 140], close: [70, 30, 60], bridge: null, heck: null, aussen: null },
+    shipCams: true,
+  },
+};
+// times of day from src/world/environment.ts (hemisphere ×1.7 as in the game); dark drives lamps and glow points
+const LIGHTS = {
+  noon: { name: 'Mittag', sun: '#fff1de', sunI: 2.5, sky: '#bcdaf8', ground: '#7a7462', hemiI: 1.7, bg: '#bfe0fa', pos: [30, 60, 40], dark: 0 },
+  evening: { name: 'Abend', sun: '#ffa060', sunI: 1.6, sky: '#dcb8b0', ground: '#7a5440', hemiI: 1.45, bg: '#ffb67a', pos: [55, 16, -25], dark: 0.35 },
+  morning: { name: 'Morgen', sun: '#ffd0a0', sunI: 1.9, sky: '#a8c6ee', ground: '#6a6050', hemiI: 1.5, bg: '#f6c9a0', pos: [-55, 22, 30], dark: 0.15 },
+  night: { name: 'Nacht', sun: '#8ea6ff', sunI: 0.45, sky: '#34477a', ground: '#141a2a', hemiI: 0.9, bg: '#18213e', pos: [-20, 50, -30], dark: 1 },
+};
+const KEYS = { Digit1: 'noon', Digit2: 'evening', Digit3: 'morning', Digit4: 'night' };
+
+const query = new URLSearchParams(location.search);
+const modelKey = MODELS[query.get('model')] ? query.get('model') : 'otter';
+const M = MODELS[modelKey];
+const viewKey = query.get('view') in M.views ? query.get('view') : '';
+// the ship's cameras, from the model's empties (both halves look through them)
+const SHIP_CAMS = { bridge: 'cam_bridge', heck: 'cam_stern', aussen: 'cam_outside' };
+const shipCam = M.shipCams && SHIP_CAMS[viewKey];
+const bridgeView = !!shipCam;
+if (M.labels) { document.getElementById('l1').textContent = M.labels[0]; document.getElementById('l2').textContent = M.labels[1]; }
+document.title = `${M.name}-Vergleich`;
+const link = (params) => `?${new URLSearchParams({ model: modelKey, ...params })}`;
+document.getElementById('models').innerHTML = Object.entries(MODELS)
+  .map(([k, m]) => `<a href="?model=${k}"${k === modelKey ? ' class="on"' : ''}>${m.name}</a>`).join('');
+document.getElementById('views').innerHTML = Object.keys(M.views)
+  .map(v => `<a href="${link({ view: v })}"${v === viewKey ? ' class="on"' : ''}>${{ front: 'Vorn', rear: 'Heck', top: 'Oben', close: 'Nah', bridge: 'Brücke', heck: 'Achtern', aussen: 'Außen' }[v]}</a>`).join('');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.NeutralToneMapping;
+document.body.prepend(renderer.domElement);
+
+// one camera for both halves; in the bridge view each half has its own (the ships' bridge cameras)
+const camera = new THREE.PerspectiveCamera(bridgeView ? 55 : 36, 1, 0.3, M.far ?? 2000);
+camera.position.set(...(M.views[viewKey] ?? M.views.front.map((v, i) => v * [1.3, 1.2, 1.0][i])));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, M.aim, 0);
+controls.enableDamping = true;
+const bridgeCams = [new THREE.PerspectiveCamera(55, 1, 0.3, M.far ?? 2000), new THREE.PerspectiveCamera(55, 1, 0.3, M.far ?? 2000)];
+function aimCam(cam, eye, look) { cam.position.set(...eye); cam.lookAt(...look); }
+if (bridgeView) {
+  // a ship's camera view shows only the new model, full width
+  controls.enabled = false;
+  for (const id of ['l1', 'split']) document.getElementById(id).style.display = 'none';
+  document.getElementById('l2').style.left = '50%';
+}
+
+function stage() {
+  const scene = new THREE.Scene();
+  const sun = new THREE.DirectionalLight('#fff1de', 2.5);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(4096, 4096);
+  const S = M.shadow ?? 20;
+  Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: S * 10 });
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = M.shadow ? 0.4 : 0;
+  const hemi = new THREE.HemisphereLight('#bcdaf8', '#7a7462', 1.7 * 1.7);
+  scene.add(sun, hemi);
+  const G = M.ground ?? { y: 0, color: '#d2bb86', size: 120 };
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(G.size / 2, 64), new THREE.MeshLambertMaterial({ color: G.color }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = G.y;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  const turn = new THREE.Group();
+  scene.add(turn);
+  return { scene, turn, sun, hemi, lamps: [], glows: [], exhaust: [] };
+}
+const stages = [stage(), stage()];
+function place(i, obj) {
+  obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  stages[i].turn.add(obj);
+}
+
+// the old one, straight from the game's code
+const old = M.old();
+place(0, old.group);
+stages[0].lamps.push(old.lights);
+stages[0].glows.push(old.glow);
+if (old.exhaust) stages[0].exhaust.push(old.exhaust);
+
+/** a new model as the game would use it: its material, unlit lamps, decals with a depth offset, empties as glow points */
+function dress(gltf, i) {
+  const mat = lowPolyMaterial(), lights = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  const decals = lowPolyMaterial({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  const sets = new Map();
+  gltf.scene.traverse(o => {
+    if (o.isMesh) o.material = o.name.startsWith('lights') ? lights : o.name.startsWith('decals') ? decals : mat;
+    if (o.userData.glow) {
+      const key = `${o.parent.uuid}:${o.userData.exhaust ? 'x' : 'g'}`;
+      if (!sets.has(key)) sets.set(key, { parent: o.parent, set: new GlowSet(), exhaust: !!o.userData.exhaust });
+      sets.get(key).set.add([o.position.x, o.position.y, o.position.z], PAL[o.userData.glow], o.userData.size);
+    }
+  });
+  for (const { parent, set, exhaust } of sets.values()) {
+    const g = set.build();
+    parent.add(g);
+    (exhaust ? stages[i].exhaust : stages[i].glows).push(g);
+  }
+  stages[i].lamps.push({ material: lights });
+}
+function wrap(scene, scale, lift) {
+  const outer = new THREE.Group(), inner = new THREE.Group();
+  outer.scale.setScalar(scale);
+  inner.position.y = lift;
+  inner.add(scene);
+  outer.add(inner);
+  return outer;
+}
+const loader = new GLTFLoader();
+loader.load(new URL(M.glb, import.meta.url).href, (gltf) => {
+  dress(gltf, 1);
+  // the lift lowered with a Skua on it, as when it brings one up from the hangar
+  const lift = gltf.scene.getObjectByName('lift');
+  if (lift && query.has('lift')) {
+    lift.position.y = -Math.abs(Number(query.get('lift')));
+    loader.load(new URL('../art/skua/skua.glb', import.meta.url).href, (skua) => { dress(skua, 1); lift.add(wrap(skua.scene, 0.75, 2.4)); setLight(light); });
+  }
+  // the ship's camera for this view
+  gltf.scene.traverse(o => {
+    if (!bridgeView || o.name !== shipCam) return;
+    for (const c of bridgeCams) aimCam(c, o.userData.eye, o.userData.look);
+  });
+  place(1, wrap(gltf.scene, M.scale, M.lift));
+  setLight(light);
+});
+
+let spin = !query.has('angle') && !bridgeView, angle = bridgeView ? 0 : Number(query.get('angle') ?? -0.6);
+let light = LIGHTS[query.get('light')] ? query.get('light') : 'noon';
+const fog = new THREE.Fog(0xffffff, 1000, 10000);
+function setLight(key) {
+  light = key;
+  const L = LIGHTS[key];
+  for (const st of stages) {
+    st.scene.background = new THREE.Color(L.bg);
+    st.sun.color.set(L.sun); st.sun.intensity = L.sunI;
+    const k = M.shadow ? 8 : 1;
+    st.sun.position.set(L.pos[0] * k, L.pos[1] * k, L.pos[2] * k);
+    st.hemi.color.set(L.sky); st.hemi.groundColor.set(L.ground); st.hemi.intensity = L.hemiI * 1.7;
+    for (const m of st.lamps) m.material.color.setScalar(THREE.MathUtils.lerp(0.35, 2.4, L.dark));
+  }
+  document.getElementById('hint').textContent = `${M.name} · ${L.name} · 1 Mittag · 2 Abend · 3 Morgen · 4 Nacht${bridgeView ? '' : ' · Ziehen dreht · Mausrad zoomt · Leertaste hält an'}`;
+}
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !bridgeView) spin = !spin; if (KEYS[e.code]) setLight(KEYS[e.code]); });
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / 2 / innerHeight;
+  camera.updateProjectionMatrix();
+  for (const c of bridgeCams) { c.aspect = 16 / 9; c.updateProjectionMatrix(); }
+}
+addEventListener('resize', resize);
+resize();
+setLight(light);
+const clock = new THREE.Clock();
+renderer.setScissorTest(true);
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (spin) angle += dt * 0.25;
+  controls.update();
+  // in a ship's camera view the new model fills a 16:9 picture (the game's framing), letterboxed
+  const slots = bridgeView ? [1] : [0, 1];
+  const w = innerWidth / slots.length, h = bridgeView ? Math.min(innerHeight, w * 9 / 16) : innerHeight, y = (innerHeight - h) / 2;
+  const k = THREE.MathUtils.smoothstep(LIGHTS[light].dark, 0.25, 0.8);
+  renderer.setScissor(0, 0, innerWidth, innerHeight);
+  renderer.setViewport(0, 0, innerWidth, innerHeight);
+  renderer.setClearColor(0x0b1218);
+  renderer.clear();
+  stages.forEach((s, i) => {
+    const slot = slots.indexOf(i);
+    if (slot < 0) return;
+    const cam = bridgeView ? bridgeCams[i] : camera;
+    s.turn.rotation.y = angle;
+    for (const g of s.glows) g.update(k, cam, h * renderer.getPixelRatio(), fog);
+    for (const g of s.exhaust) g.update(0.7, cam, h * renderer.getPixelRatio(), fog);
+    renderer.setViewport(slot * w, y, w, h);
+    renderer.setScissor(slot * w, y, w, h);
+    renderer.render(s.scene, cam);
+  });
+});
+window.compareView = { camera, controls, setAngle: (a) => { angle = a; spin = false; }, setSpin: (v) => { spin = v; } };
+</script>
+</body>
+</html>

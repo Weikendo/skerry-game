@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Kampfeffekte</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<iframe id="game"></iframe>
+<script type="module">
+// Combat effects in fixed scenes of the test range, frozen for a still (headless Chrome with a short
+// --virtual-time-budget). ?scene=otter|skua|einschlag&t=1.2 (seconds of fire before the still; einschlag 2.6, so the
+// first bolts have arrived). Explosions: ?scene=boom|wasser|absturz|wrack&t=0.5 (seconds after it went off):
+// a gun destroyed, a blast on the water, an enemy Skua shot out of the sky, the player's Otter lost in the water. The units are
+// made invulnerable; then the game time stands still and the camera stays put.
+const q = new URLSearchParams(location.search);
+const scene = q.get('scene') ?? 'otter', fireFor = Number(q.get('t') ?? (scene === 'einschlag' ? 2.6 : 1.2));
+const frame = document.getElementById('game');
+frame.src = '/?probe=kampf';
+frame.addEventListener('load', async () => {
+  const w = frame.contentWindow, d = frame.contentDocument;
+  while (!w.cc) await new Promise(r => setTimeout(r, 100));
+  const cc = w.cc;
+  d.getElementById('boot')?.remove();
+  const st = d.createElement('style');
+  st.textContent = 'body > *:not(#app){display:none!important} #app > *:not(canvas){display:none!important}';
+  d.head.appendChild(st);
+  const run = (s, each) => { for (let i = 0; i < Math.round(s * 30); i++) { each?.(); cc.step(performance.now(), 1 / 30); } };
+  const ot = cc.walruses[0], sk = cc.mantas[0];
+  ot.hit = () => false; sk.hit = () => false;
+  run(0.3);
+  // a gun with a clear line of fire from the water 800 m off, on the ship's side of the island (in radio range)
+  const guns = cc.bases.flatMap(b => b.buildings.filter(x => x.head && x.alive && x.team === 'feind'))
+    .sort((a, b) => Math.hypot(a.p.x - cc.carrier.pos.x, a.p.z - cc.carrier.pos.z) - Math.hypot(b.p.x - cc.carrier.pos.x, b.p.z - cc.carrier.pos.z));
+  let gun = null, spot = null;
+  for (const g of guns) {
+    const dx = cc.carrier.pos.x - g.p.x, dz = cc.carrier.pos.z - g.p.z, l = Math.hypot(dx, dz);
+    for (const dist of [800, 900, 700]) {
+      const x = g.p.x + dx / l * dist, z = g.p.z + dz / l * dist;
+      if (cc.world.heightAt(x, z) > -3) continue;
+      const from = ot.pos.clone().set(x, 4, z), c = g.centre(from.clone());
+      if (cc.combat.raycast(from, c.clone().sub(from), dist + 50, ot).target === g) { gun = g; spot = { x, z, dx: -dx / l, dz: -dz / l }; break; }
+    }
+    if (gun) break;
+  }
+  if (!gun) { console.warn('fx: kein Geschütz mit freier Linie'); return; }
+  gun.hit = () => false;
+  const gc = gun.centre(ot.pos.clone());
+  cc.setDevCamera(true);
+  cc.controls.enabled = false;
+  let eyeNow = cc.camera.position.clone(), atNow = cc.camera.position.clone();
+  const look = (eye, at) => { eyeNow = eye.clone(); atNow = at.clone(); cc.camera.position.copy(eye); cc.controls.target.copy(at); cc.camera.lookAt(at); };
+  const V = (x, y, z) => ot.pos.clone().set(x, y, z);
+
+  if (['boom', 'wasser', 'absturz', 'wrack'].includes(scene)) {
+    const after = Number(q.get('t') ?? 0.5);
+    let eye, at;
+    if (scene === 'boom') {
+      delete gun.hit;  // it may die now (the prototype's hit)
+      eye = V(gc.x - spot.dx * 110 + spot.dz * 70, gc.y + 25, gc.z - spot.dz * 110 - spot.dx * 70); at = V(gc.x, gc.y + 12, gc.z);
+      look(eye, at); run(0.2, () => look(eye, at));
+      cc.combat.areaDamage(gc, 6, 1e6, 'spieler');
+    } else if (scene === 'wasser') {
+      const x = spot.x - spot.dx * 300, z = spot.z - spot.dz * 300;
+      eye = V(x - spot.dz * 120, 14, z + spot.dx * 120); at = V(x, 8, z);
+      look(eye, at); run(0.2, () => look(eye, at));
+      cc.effects.explosion(V(x, 1, z), 1.4, '#6c7078');
+    } else if (scene === 'absturz') {
+      const foe = cc.foeSkuas[0], x = spot.x - spot.dx * 600, z = spot.z - spot.dz * 600;
+      foe.loadState({ ...foe.saveState(), state: 'flug', x: x + spot.dz * 300, y: 220, z: z - spot.dx * 300, yaw: Math.atan2(-spot.dz, spot.dx), pitch: -0.15, bank: 0, speed: 120, throttle: 0.5, pad: null, waypoint: null });
+      eye = V(x - spot.dz * 350, 60, z + spot.dx * 350); at = V(x, 120, z);
+      look(eye, at); run(0.3, () => look(eye, at));
+      foe.hit(1e6);
+    } else {
+      ot.loadState({ ...ot.saveState(), state: 'fahren', x: spot.x, z: spot.z, heading: Math.atan2(spot.dx, spot.dz), speed: 0, medium: 'wasser', waypoint: null });
+      delete ot.hit;
+      eye = V(spot.x - spot.dx * 45 + spot.dz * 30, 12, spot.z - spot.dz * 45 - spot.dx * 30); at = V(spot.x, 3, spot.z);
+      look(eye, at); run(0.3, () => look(eye, at));
+      ot.hit(1e6);
+    }
+    run(after, () => look(eye, at));
+    look(eye, at);
+  } else if (scene === 'otter' || scene === 'einschlag') {
+    ot.loadState({ ...ot.saveState(), state: 'fahren', x: spot.x, z: spot.z, heading: Math.atan2(spot.dx, spot.dz), speed: 0, medium: 'wasser', waypoint: null });
+    cc.setVehicle('walrus');
+    cc.selectCam('walrus-mast');
+    run(0.5);
+    // the Otter's aim held on the gun (the game would aim it through the Otter's camera, here the free camera looks on)
+    const fixed = gc.clone();
+    fixed.copy = () => fixed;
+    Object.defineProperty(ot, 'aimValid', { get: () => true, set: () => {} });
+    Object.defineProperty(ot, 'aim', { get: () => fixed });
+    const aim = () => {};
+    run(2, aim);
+    // otter: from the side, 90 m off the line of fire a third of the way to the gun, so the shots cross the picture
+    const mid = { x: ot.pos.x + spot.dx * 260, z: ot.pos.z + spot.dz * 260 };
+    const eye = scene === 'otter'
+      ? V(mid.x - spot.dz * 90, 14, mid.z + spot.dx * 90)
+      : V(gc.x - spot.dx * 70 + spot.dz * 45, gc.y + 18, gc.z - spot.dz * 70 - spot.dx * 45);
+    const at = scene === 'otter' ? V(mid.x, 8, mid.z) : gc;
+    // fire: hold the trigger by hand (Space)
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { code: 'Space', key: ' ' }));
+    run(fireFor, () => { aim(); look(eye, at); });
+    w.dispatchEvent(new w.KeyboardEvent('keyup', { code: 'Space', key: ' ' }));
+    cc.step(performance.now(), 1 / 30);
+    look(eye, at);
+  } else {
+    // the Skua dives at the gun from 1.4 km, 320 m up, firing its Quasar and an Assassin
+    const back = 1400, y = gc.y + 320;
+    const x = gc.x - spot.dx * back, z = gc.z - spot.dz * back;
+    const dist = Math.hypot(back, y - gc.y), pitch = -Math.asin((y - gc.y) / dist);
+    cc.pilots.setManta(sk, null);
+    sk.loadState({ ...sk.saveState(), state: 'flug', x, y, z, yaw: Math.atan2(spot.dx, spot.dz), pitch, bank: 0, speed: 140, throttle: 0.5, pad: null, waypoint: null });
+    cc.setVehicle('manta');
+    const hold = () => { sk.pitch = pitch; sk.bank = 0; sk.yaw = Math.atan2(spot.dx, spot.dz); };
+    run(0.3, hold);
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { code: 'KeyX', key: 'x' }));
+    run(1 / 30, hold);
+    w.dispatchEvent(new w.KeyboardEvent('keyup', { code: 'KeyX', key: 'x' }));
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { code: 'Space', key: ' ' }));
+    // from the side and a little behind, 70 m off
+    const cam = () => {
+      const f = sk.forward;
+      look(V(sk.pos.x - f.x * 30 + f.z * 70, sk.pos.y + 6, sk.pos.z - f.z * 30 - f.x * 70), V(sk.pos.x + f.x * 60, sk.pos.y + f.y * 60, sk.pos.z + f.z * 60));
+    };
+    run(fireFor, () => { hold(); cam(); });
+    w.dispatchEvent(new w.KeyboardEvent('keyup', { code: 'Space', key: ' ' }));
+    cam();
+  }
+  // freeze: the game time stands still while frames go on being drawn (headless Chrome takes its picture from a fresh one)
+  cc.params.zeitraffer = 0;
+  const keep = () => { look(eyeNow, atNow); setTimeout(keep, 16); };
+  keep();
+  console.info(`fx ${scene} fertig`);
+});
+</script>
+</body>
+</html>

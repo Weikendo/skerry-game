@@ -1,0 +1,15 @@
+.venv/
+original/
+__pycache__/
+.DS_Store
+node_modules/
+dist/
+
+release/
+
+# Blender work files and review pictures (the scripts in art/ build them again)
+art/**/*.blend
+art/**/*.blend1
+art/**/renders/
+art/**/compare/
+art/**/compare-neu/

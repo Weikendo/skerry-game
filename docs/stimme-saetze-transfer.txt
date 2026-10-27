@@ -1,0 +1,51 @@
+Transferdrohne läuft aus.
+
+Transferdrohne angedockt.
+
+Nachschub an Bord.
+
+Laderaum voll, der Rest geht zurück.
+
+Transferdrohne wieder bereit.
+
+Transfer abgebrochen.
+
+Transferdrohne ist bereits unterwegs.
+
+Zu weit von der Lagerinsel entfernt.
+
+Nichts zu liefern.
+
+Lagerinsel in Reichweite.
+
+Lagerinsel außer Reichweite.
+
+Versorgungsnetz unterbrochen.
+
+Lagerinsel verloren.
+
+Transfer drone under way.
+
+Transfer drone docked.
+
+Supplies on board.
+
+Hold full, the rest goes back.
+
+Transfer drone ready again.
+
+Transfer aborted.
+
+Transfer drone already under way.
+
+Too far from the stockpile island.
+
+Nothing to deliver.
+
+Stockpile island in range.
+
+Stockpile island out of range.
+
+Supply network cut off.
+
+Stockpile island lost.

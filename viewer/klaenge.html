@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampfklänge</title>
+<style>
+  :root { --bg: #14181d; --card: #1c2229; --line: #2b3540; --text: #e2e6ea; --muted: #8a96a3; --good: #4fbf73; --mid: #e3b341; --bad: #e5534b; --accent: #5cc8e6; }
+  body { margin: 0; padding: 20px 16px 40px; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { color: var(--muted); margin: 0 0 14px; max-width: 80ch; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 16px; }
+  .bar .lbl { color: var(--muted); }
+  button { font: 600 12px -apple-system, sans-serif; color: var(--text); background: #232b34; border: 1px solid var(--line); border-radius: 5px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: #46566a; }
+  button.on { background: var(--accent); color: #06202a; border-color: var(--accent); }
+  #status { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .card.good { border-color: var(--good); } .card.mid { border-color: var(--mid); } .card.bad { border-color: var(--bad); }
+  .head { display: flex; align-items: center; gap: 8px; }
+  .num { font: 700 12px ui-monospace, Menlo, monospace; color: var(--muted); min-width: 22px; }
+  .name { font-weight: 700; flex: 1; }
+  .play { background: #1f3a46; border-color: #2c6f8a; }
+  .desc { color: var(--muted); }
+  .src { font-size: 11px; color: #7fb4c8; }
+  .neu { font: 700 10px -apple-system, sans-serif; color: #06202a; background: var(--accent); border-radius: 4px; padding: 1px 5px; }
+  .prev { font-size: 11px; color: #c98b87; }
+  .rate { display: flex; gap: 6px; align-items: center; }
+  .rate button.good.on { background: var(--good); border-color: var(--good); color: #062010; }
+  .rate button.mid.on { background: var(--mid); border-color: var(--mid); color: #2a1e02; }
+  .rate button.bad.on { background: var(--bad); border-color: var(--bad); color: #2a0606; }
+  .rate input { flex: 1; min-width: 0; background: #12171c; color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; font: 12px -apple-system, sans-serif; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 24px 0 8px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 140px; background: #12171c; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: 12px ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<h1>Kampfklänge zum Anhören</h1>
+<p>Jeder Klang kommt aus der echten Klangmaschine des Spiels (<code>src/audio/sound.ts</code>), so wie er im Kampf erklingt: in jedem Durchgang ein wenig anders, und je weiter weg, desto dumpfer und später. Klick auf ▶, bewerte mit gut, geht so oder schlecht und schreib bei Bedarf dazu, was stört. Unten steht alles als Text zum Kopieren. Die Bewertungen bleiben in diesem Browser gespeichert.</p>
+<p>Neu überarbeitete Klänge tragen die Markierung <span class="neu">neu</span>, deine vorige Bewertung steht jeweils darunter. Die Klänge mit „im Code vorgerechnet“ entstehen beim Start einmal im Code (<code>src/audio/forge.ts</code>): Rauschen mit fallenden Resonanzen, Bass-Punch, Metallmoden und Nachhall statt einzelner Oszillatoren.</p>
+<div class="bar">
+  <span class="lbl">Abstand:</span>
+  <button data-d="30" class="on">nah (30 m)</button><button data-d="250">mittel (250 m)</button><button data-d="900">fern (900 m)</button>
+  <span id="status">Der erste Klick schaltet den Ton ein.</span>
+</div>
+<div class="grid" id="grid"></div>
+<h2>Zusammenfassung</h2>
+<textarea id="sum" readonly></textarea>
+<div class="bar" style="margin-top:8px"><button id="copy">Text kopieren</button><button id="reset">Bewertungen löschen</button></div>
+<script type="module">
+import * as THREE from 'three';
+import { SoundEngine } from '/src/audio/sound.ts';
+
+const S = new SoundEngine();
+let dist = 30;
+const at = (d = dist) => new THREE.Vector3(d * 0.25, 2, -d);
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+/** a loop the game feeds every frame: here for `sec` seconds, `each(t, dt)` per frame */
+const loop = (sec, each, end) => new Promise(done => {
+  const t0 = performance.now(); let last = t0;
+  const step = (now) => {
+    const t = (now - t0) / 1000, dt = (now - last) / 1000; last = now;
+    if (t < sec) { each(t, dt); requestAnimationFrame(step); } else { end(); done(); }
+  };
+  requestAnimationFrame(step);
+});
+const REC = 'Aufnahme + Synthese', SYN = 'nur Synthese', ONLY = 'Aufnahme', FORGE = 'im Code vorgerechnet', FORGE_REC = 'im Code vorgerechnet + Aufnahme', FORGE_SYN = 'im Code vorgerechnet + Synthese';
+/** reworked after a round of ratings (the round): their rating then moves to `prev` once; the badge marks the latest round */
+const REWORKED = { laser: 1, 'laser-schwer': 1, turm: 1, 'turm-stoss': 1, rakete: 1, truemmer: 1, treffer: 1, metall: 2, abschuss: 2, 'skua-schub': 3, 'skua-vorbei': 3 };
+const ROUND = Math.max(...Object.values(REWORKED));
+const NEU = new Set(Object.keys(REWORKED).filter(id => REWORKED[id] === ROUND));
+const SOUNDS = [
+  ['laser', 'Laser', 'Schuss des Otters und der Skua (auch feindlich)', FORGE, () => S.shot('laser', at(), true)],
+  ['laser-schwer', 'Schwerer Laser', 'die stärkere Laserversion', FORGE, () => S.shot('laser', at(), true, true)],
+  ['turm', 'Laserturm', 'Einzelschuss des Turms der Stoorworm und der Nuckelavee', FORGE, () => S.turretShot(at(), false)],
+  ['turm-stoss', 'Laserturm, Feuerstoß', 'drei Schüsse, die späteren leiser und kürzer', FORGE, async () => { S.turretShot(at(), false); await wait(220); S.turretShot(at(), true); await wait(220); S.turretShot(at(), true); }],
+  ['kanone', 'Geschütz', 'Kanone der Inselverteidigung', REC, () => S.shot('kanone', at(), false)],
+  ['rakete', 'Raketenstart', 'Lenkrakete der Skua oder eines Geschützes', FORGE_REC, () => S.shot('rakete', at(), true)],
+  ['hammerhead', 'Hammerhead-Start', 'vom Heck der Stoorworm', REC, () => S.hammerhead(at())],
+  ['hammerhead-flug', 'Hammerhead im Vorbeiflug', 'ihr Triebwerk, 3 s quer vorbei', SYN, () => loop(3, (t) => S.missileRoar(new THREE.Vector3(-600 + 400 * t, 20, -Math.max(dist, 60)), 240), () => S.missileRoar(null))],
+  ['metall', 'Treffer am Fahrzeug', 'Einschlag auf Panzerung', FORGE, () => S.impact(at(), 'hit')],
+  ['boden', 'Einschlag im Boden', 'Erde und Stein', ONLY, () => S.impact(at(), 'land')],
+  ['wasser', 'Einschlag im Wasser', 'kleiner Platscher', ONLY, () => S.impact(at(), 'water')],
+  ['explosion-klein', 'Explosion klein', 'ein Fahrzeug, eine Rakete', REC, () => S.explosion(at(), 0.5)],
+  ['explosion-mittel', 'Explosion mittel', 'eine Skua, ein Geschütz', REC, () => S.explosion(at(), 1.2)],
+  ['explosion-gross', 'Explosion groß', 'ein Gebäude, mit Donner als Nachrollen', REC, () => S.explosion(at(), 2.5)],
+  ['truemmer', 'Trümmer', 'ein Wrack stürzt auf Land', FORGE, () => S.debris(at())],
+  ['platscher', 'Großer Platscher', 'Explosion auf dem Wasser, Wrack stürzt ins Meer', ONLY, () => S.splash(at(), 1.5)],
+  ['taeusch', 'Täuschkörper', 'Abschuss, Zischen, 9 s Brennen', REC, () => S.decoy(at())],
+  ['abwehr-start', 'Abwehrdrohne startet', 'Druckluft und anlaufender Motor', SYN, () => S.shieldLaunch(at())],
+  ['abwehr-platzt', 'Abwehrdrohne platzt', 'getroffen: Knall und flatternde Hülle', SYN, () => S.shieldBurst(at())],
+  ['beob-start', 'Beobachtungsdrohne startet', 'hellerer Raketenmotor', REC, () => S.observerLaunch(at())],
+  ['schirm', 'Fallschirm öffnet sich', 'die Beobachtungsdrohne', SYN, () => S.chute(at())],
+  ['feuer', 'Feuer', 'brennendes Wrack oder Gebäude, 4 s', ONLY, () => loop(4, () => S.fireAt(at(), 6), () => S.fireAt(null, 0))],
+  ['treffer', 'Treffer bestätigt', 'Rückmeldung, wenn der eigene Schuss trifft', FORGE, () => S.hitConfirm(false)],
+  ['abschuss', 'Abschuss', 'Rückmeldung, wenn das Ziel zerstört ist', FORGE, () => S.hitConfirm(true)],
+  ['warnung', 'Raketenwarnung', 'erst aufgeschaltet, dann eine Rakete im Anflug, 4 s', SYN, () => loop(4, (t, dt) => S.lockWarning(dt, true, t > 2 ? 1 : 0), () => S.lockWarning(0, false, 0))],
+  ['ueberhitzt', 'Laser überhitzt', 'Warnton', SYN, () => S.overheat()],
+  ['skua-schub', 'Skua-Triebwerk', 'in 40 m, 6 s: wenig Schub, Vollgas, zurück auf halb', FORGE_SYN, () => loop(6, (t) => engines({ on: true, thrust: t < 1.5 ? 0.2 : t < 4 ? 1 : 0.5, pos: at(40) }), () => engines({ on: false, thrust: 0, pos: at() }))],
+  ['skua-vorbei', 'Skua im Vorbeiflug', 'mit 80 % Schub, 4 s quer vorbei', FORGE_SYN, () => loop(4, (t) => engines({ on: true, thrust: 0.8, pos: new THREE.Vector3(-300 + 150 * t, 30, -Math.max(dist, 60)) }), () => engines({ on: false, thrust: 0, pos: at() }))],
+];
+/** only the Skua's engine sounds (the game drives all engines every frame) */
+function engines(manta) {
+  S.enginesUpdate({ carrierSpeed: 0, carrierNear: 0, walrus: { on: false, rpm: 0, pos: at() }, manta, drohne: { on: false, rpm: 0, pos: at() } });
+}
+
+const KEY = 'skerry-klaenge';
+let marks = {};
+try { marks = JSON.parse(localStorage.getItem(KEY) ?? '{}'); } catch { /* storage blocked */ }
+for (const [id, round] of Object.entries(REWORKED)) {
+  const m = marks[id], had = m?.neu === true ? 1 : (m?.neu ?? 0);
+  if (had >= round) continue;
+  marks[id] = { neu: round, prev: m && (m.r || m.n) ? { r: m.r, n: m.n } : m?.prev };
+}
+try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch { /* storage blocked */ }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch { /* storage blocked */ } summary(); };
+const LABEL = { good: 'gut', mid: 'geht so', bad: 'schlecht' };
+
+const grid = document.getElementById('grid');
+SOUNDS.forEach(([id, name, desc, src, play], i) => {
+  const m = marks[id] ?? {};
+  const el = document.createElement('div');
+  el.className = `card ${m.r ?? ''}`;
+  const prev = NEU.has(id) && m.prev ? `<div class="prev">vorher: ${m.prev.r ? LABEL[m.prev.r] : '–'}${m.prev.n ? ` – ${m.prev.n.replace(/</g, '&lt;')}` : ''}</div>` : '';
+  el.innerHTML = `<div class="head"><span class="num">${i + 1}</span><span class="name">${name}</span>${NEU.has(id) ? '<span class="neu">neu</span>' : ''}<button class="play">▶ abspielen</button></div>
+    <div class="desc">${desc}</div><div class="src">${src}</div>${prev}
+    <div class="rate"><button class="good">gut</button><button class="mid">geht so</button><button class="bad">schlecht</button><input placeholder="Was stört? (optional)" value="${(m.n ?? '').replace(/"/g, '&quot;')}"></div>`;
+  const rateBtns = [...el.querySelectorAll('.rate button')];
+  const show = () => { el.className = `card ${marks[id]?.r ?? ''}`; rateBtns.forEach(b => b.classList.toggle('on', marks[id]?.r === b.className.split(' ')[0])); };
+  el.querySelector('.play').addEventListener('click', () => { S.unlock(); play(); });
+  rateBtns.forEach(b => b.addEventListener('click', () => {
+    const r = b.classList[0];
+    marks[id] = { ...(marks[id] ?? {}), r: marks[id]?.r === r ? undefined : r };
+    show(); save();
+  }));
+  el.querySelector('input').addEventListener('input', (e) => { marks[id] = { ...(marks[id] ?? {}), n: e.target.value }; save(); });
+  grid.append(el);
+  show();
+});
+
+function summary() {
+  const lines = SOUNDS.map(([id, name], i) => {
+    const m = marks[id];
+    if (!m || (!m.r && !m.n)) return null;
+    return `${i + 1} ${name}${NEU.has(id) ? ' (neu)' : ''}: ${m.r ? LABEL[m.r] : '–'}${m.n ? ` – ${m.n}` : ''}`;
+  }).filter(Boolean);
+  document.getElementById('sum').value = lines.length ? `Kampfklänge (Abstand zuletzt ${dist} m):\n${lines.join('\n')}` : '';
+}
+summary();
+
+document.querySelectorAll('[data-d]').forEach(b => b.addEventListener('click', () => {
+  dist = Number(b.dataset.d);
+  document.querySelectorAll('[data-d]').forEach(x => x.classList.toggle('on', x === b));
+  summary();
+}));
+document.getElementById('copy').addEventListener('click', async () => {
+  const ta = document.getElementById('sum');
+  try { await navigator.clipboard.writeText(ta.value); } catch { ta.select(); document.execCommand('copy'); }
+  document.getElementById('status').textContent = 'Text kopiert.';
+});
+document.getElementById('reset').addEventListener('click', () => {
+  if (!confirm('Alle Bewertungen und Notizen löschen?')) return;
+  marks = {}; save(); location.reload();
+});
+// (the sound engine unlocks itself on the first pointerdown; this only tells whether it worked)
+addEventListener('pointerdown', () => {
+  S.unlock();
+  setTimeout(() => { document.getElementById('status').textContent = S.running ? 'Ton an – die Aufnahmen sind nach einer Sekunde geladen.' : 'Ton ließ sich nicht einschalten.'; }, 300);
+});
+</script>
+</body>
+</html>

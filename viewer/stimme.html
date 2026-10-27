@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bordcomputer-Stimme</title>
+<style>
+  :root { --bg: #14181d; --card: #1c2229; --line: #2b3540; --text: #e2e6ea; --muted: #8a96a3; --accent: #5cc8e6; --bad: #e5534b; }
+  body { margin: 0; padding: 20px 16px 40px; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { color: var(--muted); margin: 0 0 14px; max-width: 80ch; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  button { font: 600 12px -apple-system, sans-serif; color: var(--text); background: #232b34; border: 1px solid var(--line); border-radius: 5px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: #46566a; }
+  button.on { background: var(--accent); color: #06202a; border-color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; max-width: 980px; }
+  td, th { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  td.id { font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
+  tr.play td { background: #1f3a46; }
+  .err { color: var(--bad); }
+</style>
+</head>
+<body>
+<h1>Bordcomputer-Stimme</h1>
+<p>Die 46 Sätze (ab Nr. 34 die Transferdrohne), geschnitten aus den ElevenLabs-Aufnahmen (<code>src/assets/stimme/de</code> und <code>/en</code>). Bitte prüfen, ob jeder Satz zu seinem Text passt und nichts abgeschnitten ist.</p>
+<div class="bar">
+  <button id="allDe">▶ alle deutschen nacheinander</button>
+  <button id="allEn">▶ alle englischen nacheinander</button>
+  <button id="stop">■ Stopp</button>
+</div>
+<table><thead><tr><th>Nr.</th><th>ID</th><th>Deutsch</th><th></th><th>English</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<script type="module">
+// the lines, in the order of docs/bordcomputer-stimme.md
+const LINES = [
+  ['rakete-anflug', 'Rakete im Anflug.', 'Missile inbound.'],
+  ['hammerhead-anflug', 'Hammerhead im Anflug.', 'Hammerhead inbound.'],
+  ['schiff-beschuss', 'Wir werden beschossen.', 'We are under fire.'],
+  ['schiff-schaden', 'Schwere Schäden am Schiff.', 'Heavy damage to the ship.'],
+  ['schiff-sinkt', 'Die Stoorworm sinkt.', 'The Stoorworm is sinking.'],
+  ['feind-skua', 'Feindliche Skua im Anflug.', 'Enemy Skua inbound.'],
+  ['feind-luftangriff', 'Feindlicher Luftangriff auf eine Insel.', 'Enemy air raid on one of our islands.'],
+  ['insel-angriff', 'Eine unserer Inseln wird angegriffen.', 'One of our islands is under attack.'],
+  ['feind-traeger', 'Feindlicher Träger gesichtet.', 'Enemy carrier sighted.'],
+  ['feind-traeger-weg', 'Kontakt zum feindlichen Träger verloren.', 'Contact with the enemy carrier lost.'],
+  ['feind-accb', 'Der Feind setzt eine ACCB ab.', 'Enemy ACCB landing.'],
+  ['feind-beobachter', 'Feindliche Beobachtungsdrohne gestartet.', 'Enemy observation drone launched.'],
+  ['feind-insel', 'Der Feind hat eine Insel eingenommen.', 'The enemy has taken an island.'],
+  ['skua-verloren', 'Skua verloren.', 'Skua lost.'],
+  ['otter-verloren', 'Otter verloren.', 'Otter lost.'],
+  ['drohne-verloren', 'Drohne verloren.', 'Drone lost.'],
+  ['funk-schwach', 'Funksignal schwach.', 'Signal weak.'],
+  ['funk-weg', 'Funkverbindung verloren.', 'Signal lost.'],
+  ['treibstoff', 'Treibstoff knapp.', 'Fuel low.'],
+  ['panzerung', 'Panzerung niedrig.', 'Armour low.'],
+  ['laser-heiss', 'Laser überhitzt.', 'Laser overheated.'],
+  ['ziel-zerstoert', 'Ziel zerstört.', 'Target destroyed.'],
+  ['skua-abschuss', 'Feindliche Skua abgeschossen.', 'Enemy Skua down.'],
+  ['insel-neutral', 'Inselverteidigung ausgeschaltet.', 'Island defences neutralised.'],
+  ['feind-zentrale', 'Feindliche Kommandozentrale zerstört.', 'Enemy command centre destroyed.'],
+  ['insel-erobert', 'Insel eingenommen.', 'Island captured.'],
+  ['traeger-treffer', 'Treffer auf dem feindlichen Träger.', 'Hit on the enemy carrier.'],
+  ['traeger-sinkt', 'Der feindliche Träger sinkt.', 'The enemy carrier is sinking.'],
+  ['bereit', 'Bordcomputer bereit.', "Ship's computer online."],
+  ['angriff-start', 'Skua startet zum Angriff.', 'Skua launching for attack.'],
+  ['angriff-heim', 'Skua kehrt zurück.', 'Skua returning.'],
+  ['reparatur', 'Reparatur abgeschlossen.', 'Repairs complete.'],
+  ['kartiert', 'Insel kartiert.', 'Island surveyed.'],
+  ['transfer-start', 'Transferdrohne läuft aus.', 'Transfer drone under way.'],
+  ['transfer-angedockt', 'Transferdrohne angedockt.', 'Transfer drone docked.'],
+  ['transfer-geliefert', 'Nachschub an Bord.', 'Supplies on board.'],
+  ['transfer-voll', 'Laderaum voll, der Rest geht zurück.', 'Hold full, the rest goes back.'],
+  ['transfer-bereit', 'Transferdrohne wieder bereit.', 'Transfer drone ready again.'],
+  ['transfer-abbruch', 'Transfer abgebrochen.', 'Transfer aborted.'],
+  ['transfer-unterwegs', 'Transferdrohne ist bereits unterwegs.', 'Transfer drone already under way.'],
+  ['transfer-zu-weit', 'Zu weit von der Lagerinsel entfernt.', 'Too far from the stockpile island.'],
+  ['transfer-nichts', 'Nichts zu liefern.', 'Nothing to deliver.'],
+  ['lager-in-reichweite', 'Lagerinsel in Reichweite.', 'Stockpile island in range.'],
+  ['lager-ausser-reichweite', 'Lagerinsel außer Reichweite.', 'Stockpile island out of range.'],
+  ['netz-unterbrochen', 'Versorgungsnetz unterbrochen.', 'Supply network cut off.'],
+  ['lager-verloren', 'Lagerinsel verloren.', 'Stockpile island lost.'],
+];
+// relative, so the page also works opened as a file (without the dev server)
+const url = (lang, id) => `../src/assets/stimme/${lang}/${id}.ogg`;
+let current = null, chain = 0;
+const rows = document.getElementById('rows');
+const trs = LINES.map(([id, de, en], i) => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${i + 1}</td><td class="id">${id}</td><td>${de}</td><td><button data-l="de">▶</button></td><td>${en}</td><td><button data-l="en">▶</button></td>`;
+  tr.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { chain++; play(b.dataset.l, i); }));
+  rows.append(tr);
+  return tr;
+});
+function play(lang, i) {
+  return new Promise(done => {
+    current?.pause();
+    trs.forEach((t, j) => t.classList.toggle('play', j === i));
+    const a = new Audio(url(lang, LINES[i][0]));
+    current = a;
+    a.onended = () => { trs[i].classList.remove('play'); done(true); };
+    a.onerror = () => { trs[i].querySelector(`[data-l="${lang}"]`).classList.add('err'); done(true); };
+    a.play().catch(() => done(false));
+  });
+}
+async function all(lang) {
+  const me = ++chain;
+  for (let i = 0; i < LINES.length && me === chain; i++) {
+    await play(lang, i);
+    await new Promise(r => setTimeout(r, 350));
+  }
+}
+document.getElementById('allDe').addEventListener('click', () => all('de'));
+document.getElementById('allEn').addEventListener('click', () => all('en'));
+document.getElementById('stop').addEventListener('click', () => { chain++; current?.pause(); trs.forEach(t => t.classList.remove('play')); });
+</script>
+</body>
+</html>

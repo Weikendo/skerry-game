@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Spielaufnahme</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<iframe id="game"></iframe>
+<script type="module">
+// A still from the game for comparisons (headless Chrome with --virtual-time-budget). Two kinds:
+// - an island: starts a new game in a frame, hides the console and puts the free camera at it.
+//   ?island=Broad Law&ang=2.3&dist=3300&height=300&time=17, or ?biome=schaere for the first island of that kind.
+// - the combat test range: ?probe=kampf (the game starts there by itself), &run=20 plays 20 s at 30 frames
+//   per second first, &cam=walrus-mast picks a camera, &ui=1 keeps the console.
+// Both: &meer=linien switches the sea, &wetter=sturm sets the weather. The frame gets the game's own address parameters (seed, inseln, modelle, probe).
+const q = new URLSearchParams(location.search);
+const pass = new URLSearchParams();
+for (const k of ['inseln', 'seed', 'modelle', 'probe']) if (q.has(k)) pass.set(k, q.get(k));
+const frame = document.getElementById('game');
+frame.src = '/' + (pass.toString() ? `?${pass}` : '');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+frame.addEventListener('load', async () => {
+  const w = frame.contentWindow, d = frame.contentDocument;
+  while (!w.cc) await sleep(100);
+  const cc = w.cc;
+  const hideUi = () => {
+    const st = d.createElement('style');
+    st.textContent = 'body > *:not(#app){display:none!important} #app > *:not(canvas){display:none!important}';
+    d.head.appendChild(st);
+  };
+  if (q.has('meer')) { cc.params.meer = q.get('meer'); cc.ocean.setStyle(q.get('meer')); }
+  const weather = () => { if (q.has('wetter')) cc.env.setWeather(q.get('wetter'), true); };
+  weather();
+
+  if (q.has('probe')) {
+    d.getElementById('boot')?.remove();
+    const run = Number(q.get('run') ?? 0);
+    weather();
+    for (let i = 0; i < run * 30; i++) cc.step(performance.now(), 1 / 30);
+    // the state of the fight, for the log (--enable-logging=stderr)
+    const u = (x) => `${x.state} ${Math.round(x.hp)}`;
+    console.info(`Probe nach ${run} s · Stoorworm ${Math.round(cc.carrier.hp)} · Otter ${u(cc.walruses[0])} · Skua ${u(cc.mantas[0])} · ` +
+      `Feind-Otter ${cc.foeOtters.map(u).join(', ')} · Feind-Skuas ${cc.foeSkuas.map(u).join(', ')}`);
+    if (q.has('cam')) cc.selectCam(q.get('cam'));
+    if (!q.has('ui')) hideUi();
+    return;
+  }
+
+  // (the menu's buttons by what they do, so this works in either language)
+  const click = (sel) => d.querySelector(`#menu ${sel}`)?.click();
+  d.getElementById('boot')?.dispatchEvent(new w.PointerEvent('pointerdown', { bubbles: true }));
+  await sleep(500);
+  click('[data-act="page"][data-slot="new"]');
+  await sleep(300);
+  click('[data-act="start"]');
+  while (cc.menu.open) await sleep(100);
+  hideUi();
+  cc.params.zeitraffer = 0;
+  cc.env.time = Number(q.get('time') ?? 17);
+  const isl = q.has('biome') ? cc.world.islands.find(i => i.biome.id === q.get('biome'))
+    : cc.world.islands.find(i => i.name === (q.get('island') ?? 'Broad Law'));
+  const ang = Number(q.get('ang') ?? 2.3), dist = Number(q.get('dist') ?? 3300), hgt = Number(q.get('height') ?? 300);
+  const dx = Math.cos(ang), dz = Math.sin(ang);
+  const eye = [isl.cx + dx * dist, hgt, isl.cz + dz * dist], look = [isl.cx + dx * dist * 0.1, 60, isl.cz + dz * dist * 0.1];
+  cc.setDevCamera(true);
+  cc.controls.enabled = false;
+  const put = () => { cc.camera.position.set(...eye); cc.controls.target.set(...look); cc.camera.lookAt(...look); };
+  // keep the camera there while the island streams in its fine terrain and trees
+  for (;;) { put(); await sleep(16); }
+});
+</script>
+</body>
+</html>

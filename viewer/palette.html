@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design-Palette</title>
+<style>
+  :root { --bg: #14181d; --text: #e2e6ea; --muted: #8a96a3; }
+  body { margin: 0; padding: 20px 16px 40px; background: var(--bg); color: var(--text);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { color: var(--muted); margin: 0 0 20px; max-width: 70ch; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sw { width: 112px; }
+  .chip { height: 56px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .name { margin-top: 4px; font-weight: 600; }
+  .hex { color: var(--muted); font: 11px ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<h1>Design-Palette</h1>
+<p>Alle Flächenfarben des Spiels stammen aus dieser Palette (<code>src/engine/palette.ts</code>). Schattierung entsteht nur durch das Licht.</p>
+<div id="out"></div>
+<script type="module">
+import { PAL, PAL_FAMILIES } from '/src/engine/palette.ts';
+const out = document.getElementById('out');
+for (const [family, names] of Object.entries(PAL_FAMILIES)) {
+  const h = document.createElement('h2'); h.textContent = `${family} (${names.length})`; out.append(h);
+  const row = document.createElement('div'); row.className = 'row'; out.append(row);
+  for (const n of names) {
+    const sw = document.createElement('div'); sw.className = 'sw';
+    sw.innerHTML = `<div class="chip" style="background:${PAL[n]}"></div><div class="name">${n}</div><div class="hex">${PAL[n]}</div>`;
+    row.append(sw);
+  }
+}
+</script>
+</body>
+</html>

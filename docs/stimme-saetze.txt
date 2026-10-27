@@ -1,0 +1,131 @@
+Rakete im Anflug.
+
+Hammerhead im Anflug.
+
+Wir werden beschossen.
+
+Schwere Schäden am Schiff.
+
+Die Stoorworm sinkt.
+
+Feindliche Skua im Anflug.
+
+Feindlicher Luftangriff auf eine Insel.
+
+Eine unserer Inseln wird angegriffen.
+
+Feindlicher Träger gesichtet.
+
+Kontakt zum feindlichen Träger verloren.
+
+Der Feind setzt eine ACCB ab.
+
+Feindliche Beobachtungsdrohne gestartet.
+
+Der Feind hat eine Insel eingenommen.
+
+Skua verloren.
+
+Otter verloren.
+
+Drohne verloren.
+
+Funksignal schwach.
+
+Funkverbindung verloren.
+
+Treibstoff knapp.
+
+Panzerung niedrig.
+
+Laser überhitzt.
+
+Ziel zerstört.
+
+Feindliche Skua abgeschossen.
+
+Inselverteidigung ausgeschaltet.
+
+Feindliche Kommandozentrale zerstört.
+
+Insel eingenommen.
+
+Treffer auf dem feindlichen Träger.
+
+Der feindliche Träger sinkt.
+
+Bordcomputer bereit.
+
+Skua startet zum Angriff.
+
+Skua kehrt zurück.
+
+Reparatur abgeschlossen.
+
+Insel kartiert.
+
+Missile inbound.
+
+Hammerhead inbound.
+
+We are under fire.
+
+Heavy damage to the ship.
+
+The Stoorworm is sinking.
+
+Enemy Skua inbound.
+
+Enemy air raid on one of our islands.
+
+One of our islands is under attack.
+
+Enemy carrier sighted.
+
+Contact with the enemy carrier lost.
+
+Enemy ACCB landing.
+
+Enemy observation drone launched.
+
+The enemy has taken an island.
+
+Skua lost.
+
+Otter lost.
+
+Drone lost.
+
+Signal weak.
+
+Signal lost.
+
+Fuel low.
+
+Armour low.
+
+Laser overheated.
+
+Target destroyed.
+
+Enemy Skua down.
+
+Island defences neutralised.
+
+Enemy command centre destroyed.
+
+Island captured.
+
+Hit on the enemy carrier.
+
+The enemy carrier is sinking.
+
+Ship's computer online.
+
+Skua launching for attack.
+
+Skua returning.
+
+Repairs complete.
+
+Island surveyed.
