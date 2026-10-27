@@ -23,6 +23,10 @@ const BANK_RING = 9000, CEILING_Y = 720;
 
 interface Heap { pos: THREE.Vector3; threshold: number; width: number; seed: number; shade: number }
 interface Bank { angle: number; y: number; width: number; flat: number; threshold: number; band: boolean; seed: number; shade: number }
+/** a shower: hangs under heap `heap`, shows when there is enough shower weather (above `threshold`) */
+interface Shower { heap: number; threshold: number; width: number; seed: number }
+/** how many heaps can drop a shower */
+const SHOWERS = 24;
 
 /** value noise and fbm with a slight turn per octave (no grid lines), shared by the cards and the ceiling */
 const NOISE = /* glsl */ `
@@ -107,6 +111,59 @@ const cardFragment = /* glsl */ `
     #include <fog_fragment>
   }`;
 
+// a rain shaft under a cloud: a curtain from its base down to the sea, falling streaks drawn slanting by the wind,
+// thickest just under the cloud, its sides ragged and changing
+const showerVertex = /* glsl */ `
+  attribute vec3 aPos;
+  attribute vec2 aSize;
+  attribute float aSeed, aShade;
+  uniform vec2 uWind;
+  varying vec2 vLocal;
+  varying float vSeed, vFade, vSlant, vAmount;
+  #include <fog_pars_vertex>
+  void main() {
+    vec3 toCam = cameraPosition - aPos;
+    vec2 flat2 = length(toCam.xz) > 1e-3 ? normalize(toCam.xz) : vec2(0.0, 1.0);
+    vec3 right = vec3(flat2.y, 0.0, -flat2.x);
+    // aPos: the curtain's middle; it reaches from the cloud's base down to below the sea's surface
+    vec3 world = aPos + right * position.x * aSize.x + vec3(0.0, position.y * aSize.y, 0.0);
+    vLocal = uv;
+    vSeed = aSeed; vAmount = aShade;
+    // the wind across the view slants the rain (the curtain's foot lies downwind)
+    vSlant = clamp(dot(uWind, right.xz) / 40.0, -0.6, 0.6);
+    // only far off: close by the rain is the rain round the camera
+    vFade = smoothstep(1500.0, 3000.0, length(toCam.xz));
+    vec4 mvPosition = viewMatrix * vec4(world, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #include <fog_vertex>
+  }`;
+
+const showerFragment = /* glsl */ `
+  uniform float uTime;
+  uniform vec3 uColor;
+  varying vec2 vLocal;
+  varying float vSeed, vFade, vSlant, vAmount;
+  #include <fog_pars_fragment>
+  ${NOISE}
+  void main() {
+    // x -1..1 across, y 0 at the foot .. 1 at the cloud
+    float y = vLocal.y;
+    float x = vLocal.x * 2.0 - 1.0 + vSlant * (1.0 - y);
+    // the column wanders and frays at its sides
+    float wander = (fbm(vec2(y * 1.8 + vSeed, uTime * 0.01)) - 0.5) * 0.7;
+    float body = 1.0 - smoothstep(0.15, 0.95, abs(x - wander));
+    // a veil with soft falling streaks
+    float streak = fbm(vec2(x * 5.0 + vSeed * 3.0, y * 0.7 + uTime * 0.1));
+    // thickest just under the cloud, thinner towards the sea, soft where it meets the cloud
+    float a = body * (0.55 + 0.45 * smoothstep(0.3, 0.7, streak)) * (0.5 + 0.5 * smoothstep(0.0, 0.7, y))
+      * (1.0 - smoothstep(0.85, 1.0, y)) * vAmount * vFade;
+    if (a < 0.01) discard;
+    gl_FragColor = vec4(uColor, a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }`;
+
 const ceilingVertex = /* glsl */ `
   varying vec2 vXZ;
   #include <fog_pars_vertex>
@@ -178,6 +235,9 @@ export class Clouds {
   private shadow = new THREE.Color();
   private tint = new THREE.Color();
   private cool = new THREE.Color();
+  private showers: Shower[] = [];
+  private showerCards: ReturnType<typeof cards>;
+  private showerMat: THREE.ShaderMaterial;
 
   constructor(count = 90, seed = 9) {
     const rnd = mulberry32(seed);
@@ -186,6 +246,9 @@ export class Clouds {
         pos: new THREE.Vector3((rnd() - 0.5) * AREA, 430 + rnd() * 260, (rnd() - 0.5) * AREA),
         threshold: rnd(), width: 700 + rnd() * 900, seed: rnd() * 100, shade: 0.9 + rnd() * 0.1,
       });
+    }
+    for (let i = 0; i < SHOWERS; i++) {
+      this.showers.push({ heap: Math.floor(rnd() * count), threshold: rnd() * 0.85, width: 0.5 + rnd() * 0.4, seed: rnd() * 100 });
     }
     for (let i = 0; i < 16; i++) {
       this.banks.push({
@@ -215,9 +278,19 @@ export class Clouds {
     this.bankCards.mesh.renderOrder = 2;
     this.heapCards = cards(this.heaps.length, this.cardMat);
     this.heapCards.mesh.renderOrder = 3;
+    // the showers under the heaps (drawn before them)
+    this.showerMat = new THREE.ShaderMaterial({
+      vertexShader: showerVertex, fragmentShader: showerFragment, transparent: true, depthWrite: false, fog: true,
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+        uTime: { value: 0 }, uWind: { value: new THREE.Vector2() }, uColor: { value: new THREE.Color() },
+      }]),
+    });
+    this.showerCards = cards(SHOWERS, this.showerMat);
+    this.showerCards.mesh.renderOrder = 2.5;
+    this.showers.forEach((s, i) => this.showerCards.seed.setX(i, s.seed));
     this.banks.forEach((b, i) => { this.bankCards.band.setX(i, b.band ? 1 : 0); this.bankCards.seed.setX(i, b.seed); this.bankCards.shade.setX(i, b.shade); });
     this.heaps.forEach((h, i) => { this.heapCards.seed.setX(i, h.seed); this.heapCards.shade.setX(i, h.shade); });
-    this.mesh.add(this.ceiling, this.bankCards.mesh, this.heapCards.mesh);
+    this.mesh.add(this.ceiling, this.bankCards.mesh, this.showerCards.mesh, this.heapCards.mesh);
     this.mesh.name = 'clouds';
   }
 
@@ -254,6 +327,18 @@ export class Clouds {
       bc.size.setXY(i, Math.max(b.width * vis, 0.001), Math.max(b.width * 0.5 * b.flat * vis, 0.001));
     });
     bc.pos.needsUpdate = true; bc.size.needsUpdate = true;
+    // showers under some of the heaps: with dense cloud a few far off, in rain and storm more and heavier
+    const shower = smoothstep(0.72, 0.9, cover) * (0.45 + 0.55 * smoothstep(0.1, 0.6, w.rain));
+    const sc = this.showerCards;
+    this.showers.forEach((s, i) => {
+      const h = this.heaps[s.heap], hv = smoothstep(h.threshold - 0.12, h.threshold + 0.02, cover);
+      const on = smoothstep(s.threshold, s.threshold + 0.15, shower) * hv;
+      const base = h.pos.y - lower;
+      sc.pos.setXYZ(i, wrap(h.pos.x + this.drift.x, focus.x), base / 2 - 15, wrap(h.pos.z + this.drift.y, focus.z));
+      sc.size.setXY(i, Math.max(h.width * (0.75 + w.dark * 0.8) * wide * s.width * on, 0.001), base + 30);
+      sc.shade.setX(i, on * lerp(0.7, 0.9, w.rain));
+    });
+    sc.pos.needsUpdate = true; sc.size.needsUpdate = true; sc.shade.needsUpdate = true;
     // the light on them: the sun's colour (warm at dawn and dusk, less of it under heavy cloud), dim at night; the
     // undersides take the sky's colour
     const day = env.dayness();
@@ -264,6 +349,11 @@ export class Clouds {
     this.shadow.copy(this.lit).multiplyScalar(0.62).lerp(env.zenith, 0.22 * (1 - w.dark));
     const u = this.cardMat.uniforms;
     u.uTime.value = env.elapsed;
+    // the showers in the grey of the clouds' undersides
+    const su = this.showerMat.uniforms;
+    su.uTime.value = env.elapsed;
+    su.uWind.value.set(env.windX, env.windZ);
+    su.uColor.value.copy(this.shadow).multiplyScalar(0.8);
     u.uLit.value.copy(this.lit);
     u.uShadow.value.copy(this.shadow);
     // the linings: only with the sun up and seen, strongest when it is low, faint under heavy cloud
