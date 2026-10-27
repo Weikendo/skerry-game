@@ -15,7 +15,7 @@ import { RainGlassShader } from './rainGlass';
 export class Post {
   readonly composer: EffectComposer;
   readonly bloom: UnrealBloomPass;
-  /** the scene through a wet window: its uniforms (uRain, uAngle, uSpeed, uTime, uLight) are set by the game */
+  /** the scene through a wet window: its uniforms (uRain, uAngle, uRun, uFlow, uBlow, uCentre, uTime, uLight) are set by the game */
   readonly glass: ShaderPass;
   private glassComposer: EffectComposer;
 

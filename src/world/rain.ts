@@ -5,7 +5,11 @@ import type { Environment } from './environment';
 
 const BOX = new THREE.Vector3(160, 90, 160);
 
-/** Rain streaks in a box that travels with the camera; animated in the shader. */
+/**
+ * Rain streaks in a box that travels with the camera; animated in the shader. The drops stay where they are in the
+ * world while the camera moves through them, and each streak lies along the way it moves as the camera sees it: from
+ * a fast aircraft the rain comes at it from where it flies to.
+ */
 export class Rain {
   readonly mesh: THREE.LineSegments;
   private mat: THREE.ShaderMaterial;
@@ -28,20 +32,21 @@ export class Rain {
       transparent: true, depthWrite: false,
       uniforms: {
         uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uBox: { value: BOX },
-        uWind: { value: new THREE.Vector2() }, uOpacity: { value: 0 }, uColor: { value: new THREE.Color(PAL.regen) },
+        uWind: { value: new THREE.Vector2() }, uVel: { value: new THREE.Vector3() }, uOpacity: { value: 0 }, uColor: { value: new THREE.Color(PAL.regen) },
       },
       vertexShader: /* glsl */ `
         attribute float aEnd;
-        uniform float uTime; uniform vec3 uCam, uBox; uniform vec2 uWind;
+        uniform float uTime; uniform vec3 uCam, uBox, uVel; uniform vec2 uWind;
         varying float vEnd;
         void main() {
           vec3 p = position;
-          p.y = mod(p.y - uTime * 38.0, uBox.y);
+          p.y = mod(p.y - uTime * 38.0 - uCam.y, uBox.y);
           p.xz = mod(p.xz + uWind * uTime * 0.5 - uCam.xz, uBox.xz);
           vec3 world = uCam + p - uBox * 0.5;
           world.y = uCam.y + p.y - uBox.y * 0.45;
-          vec3 dir = normalize(vec3(uWind.x * 0.04, -1.0, uWind.y * 0.04));
-          world += dir * aEnd * 1.6;
+          // the streak: 1.6 m down the wind to a camera standing still, longer and turned towards a moving one
+          vec3 still = vec3(uWind.x * 0.04, -1.0, uWind.y * 0.04) * 38.0, seen = still - uVel;
+          world += normalize(seen) * aEnd * 1.6 * clamp(length(seen) / length(still), 1.0, 5.0);
           vEnd = aEnd;
           gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
         }`,
@@ -55,8 +60,20 @@ export class Rain {
     this.mesh.name = 'rain';
   }
 
+  /** the camera's velocity through the rain, eased (a cut to another camera is no speed) */
+  private camVel = new THREE.Vector3();
+  private lastCam = new THREE.Vector3();
+  private lastT = -1;
+
   update(env: Environment, camera: THREE.Camera) {
-    const u = this.mat.uniforms;
+    const u = this.mat.uniforms, dt = env.elapsed - this.lastT;
+    if (this.lastT >= 0 && dt > 0) {
+      const v = this.lastCam.sub(camera.position).divideScalar(-dt);
+      if (v.length() < 400) this.camVel.lerp(v, Math.min(1, dt * 8));
+    }
+    this.lastT = env.elapsed;
+    this.lastCam.copy(camera.position);
+    u.uVel.value.copy(this.camVel);
     u.uTime.value = env.elapsed;
     u.uCam.value.copy(camera.position);
     u.uWind.value.set(env.windX, env.windZ);

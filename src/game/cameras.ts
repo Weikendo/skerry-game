@@ -29,8 +29,10 @@ export interface CamDef {
   panRange?: number;
   /** how far it zooms in (default 6) */
   maxZoom?: number;
-  /** world eye point from a moving part (e.g. the lens of a sensor ball) instead of `eye` */
-  eyeAt?: () => THREE.Vector3;
+  /** world eye point from a moving part of the anchor (e.g. the lens of a sensor ball) instead of `eye` */
+  eyeAt?: (anchor: THREE.Object3D) => THREE.Vector3;
+  /** banks with its anchor (a cockpit leaning into a turn); otherwise the picture keeps the horizon level */
+  roll?: boolean;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -38,6 +40,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 export class CameraSystem {
   readonly cams: CamDef[] = [];
   current: CamDef | null = null;
+  /** the cameras the player may step through (the game's difficulty leaves some out) */
+  allowed: (c: CamDef) => boolean = () => true;
   private pan = 0;          // pan/tilt/zoom of the remote camera head (mouse)
   private tilt = 0;
   private zoom = 1;
@@ -114,7 +118,7 @@ export class CameraSystem {
 
   /** step through the cameras of one group */
   cycle(group: CamGroup, dir = 1) {
-    const list = this.cams.filter(c => c.group === group);
+    const list = this.cams.filter(c => c.group === group && this.allowed(c));
     if (!list.length) return;
     const i = this.current ? list.indexOf(this.current) : -1;
     this.select(list[(i + dir + list.length) % list.length].id);
@@ -125,12 +129,12 @@ export class CameraSystem {
     const c = this.cams.find(x => x.id === id);
     if (!c) return false;
     const frame = this.frameOf(c);
-    const eye = c.eyeAt ? c.eyeAt() : c.eye.clone().applyMatrix4(frame);
+    const eye = c.eyeAt ? c.eyeAt(c.anchor) : c.eye.clone().applyMatrix4(frame);
     const dir = c.look.clone().sub(c.eye);
     if (c.tilt0) dir.applyAxisAngle(new THREE.Vector3().crossVectors(dir, UP).normalize(), c.tilt0);
     const look = c.eye.clone().add(dir).applyMatrix4(frame).sub(c.eye.clone().applyMatrix4(frame)).add(eye);
     cam.position.copy(eye);
-    cam.lookAt(look);
+    this.aim(c, frame, cam, look);
     const fov = c.fov ?? 55;
     if (Math.abs(cam.fov - fov) > 1e-3) { cam.fov = fov; cam.updateProjectionMatrix(); }
     return true;
@@ -143,6 +147,13 @@ export class CameraSystem {
     const keep = c.anchor;
     c.anchor = anchor;
     try { return this.placeRigid(id, cam); } finally { c.anchor = keep; }
+  }
+
+  /** turn `cam` to `look`: up is the anchor's up for a camera that banks with it, else straight up */
+  private aim(c: CamDef, frame: THREE.Matrix4, cam: THREE.Camera, look: THREE.Vector3) {
+    if (c.roll) cam.up.setFromMatrixColumn(frame, 1).normalize();
+    cam.lookAt(look);
+    cam.up.copy(UP);
   }
 
   private frameOf(c: CamDef): THREE.Matrix4 {
@@ -167,7 +178,7 @@ export class CameraSystem {
     const side = new THREE.Vector3().crossVectors(dir, UP).normalize();
     dir.applyAxisAngle(side, this.tilt);
     const frameEye = c.eye.clone().applyMatrix4(frame);
-    const eye = c.eyeAt ? c.eyeAt() : frameEye;
+    const eye = c.eyeAt ? c.eyeAt(c.anchor) : frameEye;
     const look = c.eye.clone().add(dir).applyMatrix4(frame).sub(frameEye).add(eye);
 
     if (this.fresh || !c.lag) {
@@ -180,7 +191,7 @@ export class CameraSystem {
       this.smoothLook.lerp(look, Math.min(1, k * 1.5));
     }
     this.camera.position.copy(this.smoothPos);
-    this.camera.lookAt(this.smoothLook);
+    this.aim(c, frame, this.camera, this.smoothLook);
     const fov = (c.fov ?? 55) / this.zoom;
     if (Math.abs(this.camera.fov - fov) > 1e-3) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
   }

@@ -325,9 +325,12 @@ def turret_body(lights: MB, glows: list) -> MB:
         b.box((xa, 0, -0.75), (xb, 0.8, 0.75), {'side': 'stahl', 'top': 'stahlHell'})
         b.bolts([(s * 0.24, y, z) for y in (0.2, 0.6) for z in (-0.55, 0.0, 0.55)], '+x' if s > 0 else '-x', r=0.05, h=0.04)
         b.pop()
-    # sensor mast with a small dish, a green status light on the sensor block
+    # sensor mast with a small dish and on top the mast camera (glass to the front, a sun visor; the game looks
+    # out of it: MAST_CAMERA in src/main.ts), a green status light on the sensor block
     b.cylinder((1.05, hi, -1.3), 0.14, 0.12, 0.15, 6, 'metall', 'anthrazit')
-    b.cylinder((1.05, hi + 0.15, -1.3), 0.06, 0.05, 0.85, 5, 'anthrazit')
+    b.cylinder((1.05, hi + 0.15, -1.3), 0.06, 0.05, 2.0, 5, 'anthrazit')
+    b.box((0.87, hi + 2.15, -1.55), (1.23, hi + 2.43, -1.02), {'side': 'anthrazit', 'front': 'glasBlau', 'top': 'metall'})
+    b.box((0.85, hi + 2.43, -1.1), (1.25, hi + 2.47, -0.92), 'anthrazit')
     b.push((1.05, hi + 1.0, -1.3), rx=-0.9)
     b.cone((0, 0, 0), 0.4, 0.14, 10, 'weiss')
     b.cylinder((0, 0.02, 0), 0.05, 0.03, 0.35, 4, 'anthrazit')
