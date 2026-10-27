@@ -562,6 +562,20 @@
   #menu .diffs { display: flex; gap: 6px; }
   #menu .diffs button { flex: 1; text-align: center; margin: 2px 0; }
   #menu .diffs button.on { border-color: #f2c46a; color: #f2c46a; background: #12384a; }
+  /* Menü → Einstellungen: tabs, then lines of label and buttons, switch or slider */
+  /* (as tall as the tallest tab, so the box stays put when the tab changes) */
+  #menu .panel.settings { box-sizing: border-box; min-height: min(590px, calc(100vh - 48px)); }
+  #menu .stabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; }
+  #menu .stabs button { margin: 0; min-width: 92px; text-align: center; }
+  #menu .stabs button.on { border-color: #f2c46a; color: #f2c46a; background: #12384a; }
+  #menu .srow { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 3px 0; border-bottom: 1px solid rgba(143,163,178,.12); }
+  #menu .srow .slabel { flex: 1; min-width: 0; color: #c8d2da; font-size: 13px; line-height: 1.25; }
+  #menu .srow .segs { display: flex; gap: 4px; flex: none; }
+  #menu .srow button { width: auto; margin: 0; padding: 4px 9px; font-size: 12px; text-align: center; }
+  #menu .srow button.on { border-color: #f2c46a; color: #f2c46a; background: #12384a; }
+  #menu .srow button.tog { min-width: 52px; }
+  #menu .srow input[type=range] { width: 120px; flex: none; margin: 0; }
+  #menu .srow .sval { width: 46px; flex: none; text-align: right; color: #f2c46a; font-size: 12px; font-variant-numeric: tabular-nums; }
   #menu .tally { margin: 6px 0 12px; border-top: 1px solid rgba(242,196,106,.16); }
   #menu .tally .trow { display: flex; justify-content: space-between; padding: 4px 2px; border-bottom: 1px solid rgba(255,255,255,.06); color: #b8c4cf; }
   #menu .tally .trow b { color: #dfe6ec; }

@@ -52,7 +52,7 @@ import { PointerControl } from './game/pointer';
 import { Combat, shotSpeed, type Target } from './game/combat';
 import { MapView, OWNER_NAMES, type EnemyView, type IslandAlarm, type MapActions, type MapCommand } from './ui/map';
 import { CameraSystem, type CamGroup } from './game/cameras';
-import { SoundEngine } from './audio/sound';
+import { SoundEngine, type SoundLevels } from './audio/sound';
 import { ShipVoice, type VoiceLine } from './audio/voice';
 import { TitleMusic } from './audio/music';
 import { bearing, helpLine, indexOf, kindOf, unitIdOf, unitName, weatherIcon, windShort, type Fleet, type PadHelp, type UnitId, type Units, type Vehicle } from './ui/hud';
@@ -66,7 +66,7 @@ import { uiScale, updateUiScale } from './ui/scale';
 import { MonitorWall, type MonitorButton, type MonitorGroup, type MonitorState } from './ui/monitors';
 import { otterCargoName, OTTER_CARGO, otterFit, refit, REPAIR_PER_SECOND, SKUA_CARGO, skuaCargoGoods, skuaCargoName, skuaCargoOf, skuaFit, walrusGoods } from './game/arsenal';
 import { GOODS, type Good } from './game/stores';
-import { Menu } from './ui/menu';
+import { Menu, type SettingItem, type SettingTab } from './ui/menu';
 import { Intro } from './ui/intro';
 import { Tutorial } from './ui/tutorial';
 import { requestBoot, SAVE_VERSION, takeBoot, writeSave, type SaveGame } from './game/savegame';
@@ -636,72 +636,24 @@ const WEATHER_NEWS: Record<WeatherName, [string, string]> = {
 };
 const weather = new WeatherSchedule(env, (w) => { params.wetter = WEATHER_NAME[w]; notify(...WEATHER_NEWS[w]); });
 
-const gui = new GUI({ title: `${GAME_TITLE} · ${t('gui.settings')}` });
+// the developer's panel (Menü → Einstellungen → Spiel → Entwicklerwerkzeuge): time and weather set by hand, unit
+// and camera, the test tools and the world; the player's settings are on the menu's own page (settingsTabs)
+const gui = new GUI({ title: `${GAME_TITLE} · ${t('set.dev')}` });
 const fTime = gui.addFolder(t('gui.timeWeather'));
 fTime.add(params, 'zeit', 0, 24, 0.01).name(t('gui.timeOfDay')).listen().onChange((v: number) => { env.time = v; });
-fTime.add(params, 'zeitLaeuft').name(t('gui.clockRuns')).listen();
-fTime.add(params, 'tempo', 0.25, 60, 0.25).name(t('gui.tempo'));
-fTime.add(params, 'zeitraffer', [1, 4, 10]).name(t('gui.timewarp')).listen();
 fTime.add(params, 'wetter', Object.keys(WEATHER_LABELS)).name(t('gui.weather')).listen()
   .onChange((v: string) => { env.setWeather(WEATHER_LABELS[v] as WeatherName); weather.restart(); });
-fTime.add(params, 'zufallsWetter').name(t('gui.randomWeather')).onChange((v: boolean) => { weather.enabled = v; weather.restart(); });
-gui.add(params, 'hintergrundPause').name(t('gui.bgPause'));
 gui.add(params, 'einheit', Object.values(VEHICLE_NAMES)).name(t('gui.unit')).listen()
   .onChange((v: string) => setVehicle(VEHICLES.find(k => VEHICLE_NAMES[k] === v)!));
 gui.add(params, 'kamera', cams.cams.filter(c => c.group !== 'Insel').map(c => c.label)).name(t('gui.camera')).listen()
   .onChange((label: string) => { const c = cams.cams.find(x => x.label === label); if (c) { setDevCamera(false); selectCam(c.id); } });
-const fGfx = gui.addFolder(t('gui.graphics'));
-fGfx.add(params, 'aufloesung', { [t('gui.auto')]: 'auto', [pct(0.5)]: '50', [pct(0.75)]: '75', [pct(1)]: '100', [t('gui.native')]: 'nativ' }).name(t('gui.resolution'))
-  .onChange(() => { autoRatio = autoCeiling(); autoCooldown = 2; blockedAbove = Infinity; requestResize(); });
-fGfx.add(params, 'maxAufloesung', { '1080p': '1080p', '1440p': '1440p', '4K': '4K', [t('gui.unlimited')]: 'unbegrenzt' }).name(t('gui.maxResolution'))
-  .onChange(() => { autoRatio = autoCeiling(); autoCooldown = 2; blockedAbove = Infinity; requestResize(); });
-fGfx.add(params, 'schatten', { [t('gui.high')]: 'hoch', [t('gui.medium')]: 'mittel', [t('gui.off')]: 'aus' }).name(t('gui.shadows')).onChange(setShadows);
-fGfx.add(params, 'bloom').name(t('gui.bloom'));
-fGfx.add(params, 'meer', { [t('gui.seaMosaic')]: 'mosaik', [t('gui.seaLines')]: 'linien' }).name(t('gui.sea')).onChange((v: SeaStyle) => ocean.setStyle(v));
-fGfx.add(params, 'bildrate', ['60', '30']).name(t('gui.frameRate'));
-fGfx.close();
-const fSound = gui.addFolder(t('gui.sound'));
-fSound.add(params, 'ton').name(t('gui.soundOn')).listen().onChange((v: boolean) => { sound.enabled = v; sound.applyLevels(); });
-fSound.add(sound.levels, 'master', 0, 1, 0.05).name(t('gui.master')).onChange(() => sound.applyLevels());
-fSound.add(sound.levels, 'effects', 0, 1, 0.05).name(t('gui.effects')).onChange(() => sound.applyLevels());
-fSound.add(sound.levels, 'engines', 0, 1, 0.05).name(t('gui.engines')).onChange(() => sound.applyLevels());
-fSound.add(sound.levels, 'ambience', 0, 1, 0.05).name(t('gui.ambience')).onChange(() => sound.applyLevels());
-fSound.add(sound.levels, 'music', 0, 1, 0.05).name(t('gui.music'));
-fSound.add(params, 'stimme').name(t('gui.voiceOn')).onChange((v: boolean) => { voice.enabled = v; });
-fSound.add(sound.levels, 'voice', 0, 1, 0.05).name(t('gui.voice')).onChange(() => sound.applyLevels());
-fSound.add(params, 'seeMusik').name(t('gui.seaMusic'));
-fSound.close();
 const fDev = gui.addFolder(t('gui.developer'));
 fDev.add(params, 'entwickler').name(t('gui.freeCam')).listen().onChange(setDevCamera);
-fDev.add(params, 'leistung').name(t('gui.perf'));
 fDev.add({ insel: islandOverview }, 'insel').name(t('gui.islandOverview'));
 // a new page in the test range: the running game is saved first (the test range itself never autosaves)
 fDev.add({ probe: () => { autosave(); leaving = true; reloadPage('?probe=kampf'); } }, 'probe').name(t('gui.probe'));
 fDev.add(params, 'befahrbarkeit').name(t('gui.drivability')).listen()
   .onChange((v: boolean) => world.setOverlay(v));
-fDev.close();
-// the controls for every device and the controller (kept in this browser, apart from the game's settings)
-const padSet = input.settings, savePad = () => input.saveSettings();
-const fCtl = gui.addFolder(t('gui.controls'));
-fCtl.add(padSet, 'invertPitch').name(t('gui.invertPitch')).onChange(savePad);
-fCtl.close();
-const fPad = gui.addFolder(t('gui.pad'));
-fPad.add(padSet, 'glyphs', { [t('gui.padAuto')]: 'auto', [t('gui.padPlaystation')]: 'playstation', [t('gui.padXbox')]: 'xbox' }).name(t('gui.padGlyphs')).onChange(savePad);
-fPad.add(padSet, 'lookSpeed', 0.4, 2, 0.05).name(t('gui.padLook')).onChange(savePad);
-fPad.add(padSet, 'invertLook').name(t('gui.padInvertLook')).onChange(savePad);
-fPad.add(padSet, 'deadzone', 0.05, 0.25, 0.01).name(t('gui.padDeadzone')).onChange(savePad);
-fPad.add(padSet, 'curve', 0, 1, 0.05).name(t('gui.padCurve')).onChange(savePad);
-fPad.add(padSet, 'rumble').name(t('gui.padRumble')).onChange(savePad);
-fPad.add(padSet, 'rumbleStrength', 0, 1, 0.05).name(t('gui.padRumbleStrength')).onChange(savePad);
-fPad.add(padSet, 'aimAssist').name(t('gui.padAimAssist')).onChange(savePad);
-fPad.close();
-const fPtr = gui.addFolder(t('gui.pointer'));
-const ptrSet = pointer.settings, savePtr = () => pointer.saveSettings();
-fPtr.add(ptrSet, 'clickCapture').name(t('gui.ptrCapture')).onChange(savePtr);
-fPtr.add(ptrSet, 'sensitivity', 0.3, 3, 0.05).name(t('gui.ptrSensitivity')).onChange(savePtr);
-fPtr.add(ptrSet, 'invertY').name(t('gui.ptrInvertY')).onChange(savePtr);
-fPtr.add(ptrSet, 'invertSwipe').name(t('gui.ptrInvertSwipe')).onChange(savePtr);
-fPtr.close();
 const worldParams = { seed: worldSeed, inseln: worldCount };
 const fWorld = gui.addFolder(t('gui.world'));
 fWorld.add(worldParams, 'seed', 1, 999999, 1).name(t('gui.seed'));
@@ -710,6 +662,110 @@ const newWorld = (seed: number) => reloadPage(`?seed=${seed}&inseln=${worldParam
 fWorld.add({ go: () => newWorld(worldParams.seed) }, 'go').name(t('gui.newWorld'));
 fWorld.add({ go: () => newWorld(Math.floor(Math.random() * 999998) + 1) }, 'go').name(t('gui.randomWorld'));
 fWorld.close();
+
+// ---------- Menü → Einstellungen: the player's settings, kept in this browser (or the app) ----------
+const SETTINGS_KEY = 'skerry-settings';
+/** what is kept between games (the clock, its tempo, the time warp and the random weather belong to the saved game) */
+const KEPT = ['aufloesung', 'maxAufloesung', 'schatten', 'bloom', 'meer', 'bildrate', 'leistung', 'ton', 'stimme', 'seeMusik', 'hintergrundPause'] as const;
+function saveSettings() {
+  if (PROBE) return;
+  const kept = Object.fromEntries(KEPT.map(k => [k, params[k]]));
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ params: kept, levels: sound.levels })); } catch { /* storage blocked */ }
+}
+/** the kept settings, at the start (missing or broken ones keep their defaults) */
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as { params?: Record<string, unknown>; levels?: Record<string, unknown> };
+    const p = params as Record<string, unknown>;
+    for (const k of KEPT) if (s.params && typeof s.params[k] === typeof p[k]) p[k] = s.params[k];
+    for (const k of Object.keys(sound.levels) as (keyof SoundLevels)[]) {
+      const v = s.levels?.[k];
+      if (typeof v === 'number' && Number.isFinite(v)) sound.levels[k] = THREE.MathUtils.clamp(v, 0, 1);
+    }
+  } catch { /* storage blocked or broken: the defaults */ }
+  setShadows(params.schatten);
+  ocean.setStyle(params.meer);
+  sound.enabled = params.ton;
+  voice.enabled = params.stimme;
+  sound.applyLevels();
+  autoRatio = autoCeiling();
+  requestResize();
+}
+/** the resolution changed: the automatic one starts afresh */
+function resolutionChanged() { autoRatio = autoCeiling(); autoCooldown = 2; blockedAbove = Infinity; requestResize(); }
+
+function settingsTabs(): SettingTab[] {
+  // every change is kept (pad and pointer keep theirs themselves) and a paused picture is drawn again
+  const kept = () => { saveSettings(); stillDrawn = false; };
+  // (pairs, not an object: an object would put the number-like values first)
+  const opts = (o: [string, string][]) => o.map(([value, label]) => ({ value, label }));
+  const choice = <K extends 'aufloesung' | 'maxAufloesung' | 'schatten' | 'meer' | 'bildrate'>(key: K, label: string, options: [string, string][], after?: (v: string) => void): SettingItem =>
+    ({ id: key, label, kind: 'choice', options: opts(options), get: () => params[key], set: (v) => { (params as Record<string, unknown>)[key] = v; after?.(v); kept(); } });
+  const flag = (key: 'bloom' | 'leistung' | 'ton' | 'stimme' | 'seeMusik' | 'hintergrundPause' | 'zeitLaeuft' | 'zufallsWetter', label: string, after?: (v: boolean) => void): SettingItem =>
+    ({ id: key, label, kind: 'toggle', get: () => params[key], set: (v) => { params[key] = v; after?.(v); kept(); } });
+  const pctOf = (v: number) => `${Math.round(v * 100)} %`;
+  const level = (key: keyof SoundLevels, label: string): SettingItem =>
+    ({ id: `level-${key}`, label, kind: 'range', min: 0, max: 1, step: 0.05, format: pctOf, get: () => sound.levels[key], set: (v) => { sound.levels[key] = v; sound.applyLevels(); kept(); } });
+  const pad = input.settings, ptr = pointer.settings;
+  const padFlag = (key: 'invertPitch' | 'invertLook' | 'rumble' | 'aimAssist', label: string): SettingItem =>
+    ({ id: `pad-${key}`, label, kind: 'toggle', get: () => pad[key], set: (v) => { pad[key] = v; input.saveSettings(); } });
+  const padRange = (key: 'lookSpeed' | 'deadzone' | 'curve' | 'rumbleStrength', label: string, min: number, max: number, step: number, format: (v: number) => string): SettingItem =>
+    ({ id: `pad-${key}`, label, kind: 'range', min, max, step, format, get: () => pad[key], set: (v) => { pad[key] = v; input.saveSettings(); } });
+  const ptrFlag = (key: 'clickCapture' | 'invertY' | 'invertSwipe', label: string): SettingItem =>
+    ({ id: `ptr-${key}`, label, kind: 'toggle', get: () => ptr[key], set: (v) => { ptr[key] = v; pointer.saveSettings(); } });
+  const times = (v: number) => `${num(v, 2)}×`;
+  return [
+    { id: 'bild', label: t('gui.graphics'), sections: [
+      { title: t('set.sec.quality'), items: [
+        choice('aufloesung', t('gui.resolution'), [['auto', t('gui.auto')], ['50', pct(0.5)], ['75', pct(0.75)], ['100', pct(1)], ['nativ', t('gui.native')]], resolutionChanged),
+        choice('maxAufloesung', t('gui.maxResolution'), [['1080p', '1080p'], ['1440p', '1440p'], ['4K', '4K'], ['unbegrenzt', t('gui.unlimited')]], resolutionChanged),
+        choice('schatten', t('gui.shadows'), [['hoch', t('gui.high')], ['mittel', t('gui.medium')], ['aus', t('gui.off')]], setShadows),
+        flag('bloom', t('set.bloom')),
+      ] },
+      { title: t('set.sec.view'), items: [
+        choice('meer', t('gui.sea'), [['mosaik', t('set.seaMosaic')], ['linien', t('set.seaLines')]], (v) => ocean.setStyle(v as SeaStyle)),
+        choice('bildrate', t('gui.frameRate'), [['60', '60'], ['30', '30']]),
+        flag('leistung', t('gui.perf')),
+      ] },
+    ], note: t('set.kept') },
+    { id: 'ton', label: t('gui.sound'), sections: [
+      { title: t('set.sec.volume'), items: [
+        level('master', t('gui.master')), level('effects', t('gui.effects')), level('engines', t('gui.engines')),
+        level('ambience', t('gui.ambience')), level('music', t('gui.music')), level('voice', t('gui.voice')),
+      ] },
+      { title: t('set.sec.switches'), items: [
+        flag('ton', t('gui.soundOn'), (v) => { sound.enabled = v; sound.applyLevels(); }),
+        flag('stimme', t('gui.voiceOn'), (v) => { voice.enabled = v; }),
+        flag('seeMusik', t('gui.seaMusic')),
+      ] },
+    ], note: t('set.kept') },
+    { id: 'steuerung', label: t('menu.controls'), sections: [
+      { title: t('gui.pointer'), items: [
+        ptrFlag('clickCapture', t('gui.ptrCapture')),
+        { id: 'ptr-sensitivity', label: t('gui.ptrSensitivity'), kind: 'range', min: 0.3, max: 3, step: 0.05, format: times, get: () => ptr.sensitivity, set: (v) => { ptr.sensitivity = v; pointer.saveSettings(); } },
+        ptrFlag('invertY', t('gui.ptrInvertY')), ptrFlag('invertSwipe', t('gui.ptrInvertSwipe')),
+      ] },
+      { title: t('gui.pad'), items: [
+        { id: 'pad-glyphs', label: t('gui.padGlyphs'), kind: 'choice', options: opts([['auto', t('gui.padAuto')], ['playstation', t('gui.padPlaystation')], ['xbox', t('gui.padXbox')]]),
+          get: () => pad.glyphs, set: (v) => { pad.glyphs = v as typeof pad.glyphs; input.saveSettings(); } },
+        padRange('lookSpeed', t('gui.padLook'), 0.4, 2, 0.05, times), padFlag('invertLook', t('gui.padInvertLook')),
+        padRange('deadzone', t('gui.padDeadzone'), 0.05, 0.25, 0.01, pctOf), padRange('curve', t('gui.padCurve'), 0, 1, 0.05, pctOf),
+        padFlag('rumble', t('gui.padRumble')), padRange('rumbleStrength', t('gui.padRumbleStrength'), 0, 1, 0.05, pctOf),
+        padFlag('aimAssist', t('gui.padAimAssist')),
+      ] },
+      { title: t('set.sec.allDevices'), items: [padFlag('invertPitch', t('gui.invertPitch'))] },
+    ], note: t('set.controlsNote') },
+    { id: 'spiel', label: t('set.tab.game'), sections: [
+      { title: t('set.sec.time'), items: [
+        flag('zeitLaeuft', t('gui.clockRuns')),
+        { id: 'tempo', label: t('gui.tempo'), kind: 'range', min: 0.25, max: 60, step: 0.25, format: (v) => num(v, v < 10 ? 2 : 0), get: () => params.tempo, set: (v) => { params.tempo = v; stillDrawn = false; } },
+        { id: 'zeitraffer', label: t('gui.timewarp'), kind: 'choice', options: opts([['1', '×1'], ['4', '×4'], ['10', '×10']]), get: () => String(params.zeitraffer), set: (v) => { params.zeitraffer = Number(v); } },
+        flag('zufallsWetter', t('gui.randomWeather'), (v) => { weather.enabled = v; weather.restart(); }),
+      ] },
+      { title: t('set.sec.window'), items: [flag('hintergrundPause', t('gui.bgPause'))] },
+    ], note: t('set.gameNote'), dev: true },
+  ];
+}
 
 // a focused <select> in the settings panel would eat game keys (typing D jumps to
 // "Deck-Kamera" ...): hand the focus back to the game after every change and click
@@ -931,7 +987,7 @@ function handleKeys(dt: number) {
   }
   if (input.hit('KeyM')) { map.toggle(); sound.blip(); }
   if (input.hit('KeyG')) { supply.toggle(); sound.blip(); }
-  if (input.hit('KeyN')) { params.ton = !params.ton; sound.enabled = params.ton; sound.applyLevels(); }
+  if (input.hit('KeyN')) { params.ton = !params.ton; sound.enabled = params.ton; sound.applyLevels(); saveSettings(); }
   if (input.hit('KeyB')) {
     params.befahrbarkeit = !params.befahrbarkeit;
     world.setOverlay(params.befahrbarkeit);
@@ -2659,7 +2715,7 @@ function step(now: number, fixedDt?: number) {
         `<span style="color:#e8d24a">■</span> ${t('top.limit', { name: t('slope.drive'), deg: SLOPE.DRIVE, pct: pct(st.drive) })} · ` +
         `<span style="color:#ef8a2e">■</span> ${t('top.limit', { name: t('slope.steep'), deg: SLOPE.STEEP, pct: pct(st.steep) })} · ` +
         `<span style="color:#d0342c">■</span> ${t('slope.blocked')} ${pct(st.blocked)}` : '');
-    help.innerHTML = pointer.locked ? pointerHelp() : helpLine(active, units, input.lastDevice === 'pad' && input.padName ? padHelp() : null, ptrSet.clickCapture, turretInHand() ? 'turret' : obsInHand() ? 'observer' : '');
+    help.innerHTML = pointer.locked ? pointerHelp() : helpLine(active, units, input.lastDevice === 'pad' && input.padName ? padHelp() : null, pointer.settings.clickCapture, turretInHand() ? 'turret' : obsInHand() ? 'observer' : '');
   }
 }
 
@@ -2907,7 +2963,8 @@ const menu = new Menu({
     reloadInto(save.meta.seed, save.meta.count);
   },
   save: (slot, name) => writeSave(slot, makeSave(name)),
-  settings: (show) => { document.body.classList.toggle('menu-settings', show); if (show) gui.open(); },
+  settingsTabs,
+  devPanel: (show) => { document.body.classList.toggle('menu-settings', show); if (show) gui.open(); },
   world: () => ({ seed: worldSeed, count: worldCount }),
   defaultName: defaultSaveName,
   glyphs: () => padGlyphs(input.padKind),
@@ -2939,6 +2996,8 @@ function startIntro() {
 addEventListener('blur', () => { if (params.hintergrundPause) pause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && params.hintergrundPause) pause(); });
 addEventListener('pagehide', () => { if (!leaving) autosave(); });
+
+loadSettings();
 
 {
   const boot = takeBoot();

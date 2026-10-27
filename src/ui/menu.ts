@@ -9,6 +9,15 @@ import type { GlyphName } from './glyphs';
 import { DIFFICULTIES, type Difficulty } from '../game/difficulty';
 import { tutorialDone } from './tutorial';
 
+/** one line of Menü → Einstellungen: a choice of a few values, a switch or a slider; `set` applies and keeps it */
+export type SettingItem = { id: string; label: string } & (
+  | { kind: 'choice'; options: { value: string; label: string }[]; get(): string; set(v: string): void }
+  | { kind: 'toggle'; get(): boolean; set(v: boolean): void }
+  | { kind: 'range'; min: number; max: number; step: number; format(v: number): string; get(): number; set(v: number): void }
+);
+/** a tab of the settings: its columns (each with a heading and lines), a note under them, the button to the developer's panel */
+export interface SettingTab { id: string; label: string; sections: { title: string; items: SettingItem[] }[]; note?: string; dev?: boolean }
+
 /** what the menu asks the game to do */
 export interface MenuActions {
   /** a game is running (the menu is the pause menu) */
@@ -19,7 +28,10 @@ export interface MenuActions {
   load(save: SaveGame): void;
   /** returns '' or why it failed */
   save(slot: SlotId, name: string): string;
-  settings(show: boolean): void;
+  /** Menü → Einstellungen */
+  settingsTabs(): SettingTab[];
+  /** the developer's panel (time, weather, cameras, the world, test tools) beside the menu */
+  devPanel(show: boolean): void;
   world(): { seed: number; count: number };
   defaultName(): string;
   /** the connected pad's button pictures, for the controls page */
@@ -34,7 +46,7 @@ export interface MenuActions {
   language(l: Lang): void;
 }
 
-type Page = 'main' | 'new' | 'load' | 'save' | 'help' | 'guide' | 'credits' | 'end';
+type Page = 'main' | 'new' | 'load' | 'save' | 'settings' | 'help' | 'guide' | 'credits' | 'end';
 
 /** how a game ended, for the end screen */
 export interface EndInfo {
@@ -129,7 +141,10 @@ export class Menu {
   private noteEl: HTMLDivElement;
   private page: Page = 'main';
   private file: HTMLInputElement;
-  private settingsOn = false;
+  private devOn = false;
+  /** the settings tab shown, and the lines of all tabs by id */
+  private settingsTab = '';
+  private items = new Map<string, SettingItem>();
   private armed = '';          // a button that needs a second press (overwrite, delete, new game)
   private repeat = 0;
 
@@ -168,6 +183,11 @@ export class Menu {
     this.el.addEventListener('input', (e) => {
       const r = e.target as HTMLInputElement;
       if (r.name === 'count') this.el.querySelector('.count')!.textContent = r.value;
+      const item = r.name.startsWith('s:') ? this.items.get(r.name.slice(2)) : undefined;
+      if (item?.kind === 'range') {
+        item.set(Number(r.value));
+        r.nextElementSibling!.textContent = item.format(item.get());
+      }
     });
   }
 
@@ -188,7 +208,7 @@ export class Menu {
     this.open = false;
     this.el.style.display = 'none';
     document.body.classList.remove('in-menu');
-    this.setSettings(false);
+    this.setDev(false);
   }
 
   private note(text: string, bad = false) {
@@ -196,9 +216,22 @@ export class Menu {
     this.noteEl.className = `note${bad ? ' bad' : ''}`;
   }
 
-  private setSettings(on: boolean) {
-    this.settingsOn = on;
-    this.actions.settings(on);
+  private setDev(on: boolean) {
+    this.devOn = on;
+    this.actions.devPanel(on);
+  }
+
+  /** a line of the settings: label, then the buttons, the switch or the slider with its value */
+  private settingRow(i: SettingItem): string {
+    let ctl: string;
+    if (i.kind === 'choice') {
+      ctl = `<div class="segs">${i.options.map(o => `<button data-act="sset" data-slot="${i.id}" data-v="${o.value}" class="seg${o.value === i.get() ? ' on' : ''}">${o.label}</button>`).join('')}</div>`;
+    } else if (i.kind === 'toggle') {
+      ctl = `<button data-act="stog" data-slot="${i.id}" class="tog${i.get() ? ' on' : ''}">${i.get() ? t('set.on') : t('set.off')}</button>`;
+    } else {
+      ctl = `<input type="range" name="s:${i.id}" min="${i.min}" max="${i.max}" step="${i.step}" value="${i.get()}"><span class="sval">${i.format(i.get())}</span>`;
+    }
+    return `<div class="srow"><span class="slabel">${i.label}</span>${ctl}</div>`;
   }
 
   private render(page: Page) {
@@ -218,7 +251,7 @@ export class Menu {
         : (auto ? `<button data-act="continue" class="big">${t('menu.resume')}<small>${esc(auto.meta.name)} · ${formatDate(auto.meta.savedAt)}</small></button>` : '') +
           `<button data-act="page" data-slot="new"${auto ? '' : ' class="big"'}>${t('menu.newGame')}</button>
            <button data-act="page" data-slot="load">${t('menu.loadGame')}</button>`;
-      html += `<button data-act="settings">${this.settingsOn ? t('menu.settingsHide') : t('menu.settings')}</button>
+      html += `<button data-act="page" data-slot="settings">${t('menu.settings')}</button>
                <button data-act="page" data-slot="guide">${t('menu.guide')}</button>
                <button data-act="page" data-slot="help">${t('menu.controls')}</button>`;
       if (inGame) html += `<button data-act="title">${t('menu.toTitle')}</button>`;
@@ -271,6 +304,16 @@ export class Menu {
         ${e.goOn ? `<button data-act="resume" class="big">${t('end.goOn')}</button>` : ''}
         <button data-act="page" data-slot="new"${e.goOn ? '' : ' class="big"'}>${t('menu.newGame')}</button>
         <button data-act="title">${t('menu.toTitle')}</button>`;
+    } else if (page === 'settings') {
+      const tabs = this.actions.settingsTabs(), tab = tabs.find(x => x.id === this.settingsTab) ?? tabs[0];
+      this.settingsTab = tab.id;
+      this.items = new Map(tabs.flatMap(x => x.sections.flatMap(s => s.items)).map(i => [i.id, i]));
+      html = `<div class="h">${t('menu.hSettings')}</div>
+        <div class="stabs">${tabs.map(x => `<button data-act="stab" data-slot="${x.id}" class="small${x.id === tab.id ? ' on' : ''}">${x.label}</button>`).join('')}</div>
+        <div class="cols">${tab.sections.map(s => `<div>${s.title ? `<h3>${s.title}</h3>` : ''}${s.items.map(i => this.settingRow(i)).join('')}</div>`).join('')}</div>
+        ${tab.note ? `<div class="hint">${tab.note}</div>` : ''}
+        ${tab.dev ? `<button data-act="dev" class="small">${this.devOn ? t('set.devHide') : t('set.dev')}</button>` : ''}
+        <button data-act="page" data-slot="main">${t('menu.back')}</button>`;
     } else if (page === 'credits') {
       html = `<div class="h">${t('menu.hCredits')}</div>${CREDITS}
         <button data-act="licenses" class="small">${t('credits.licenses')}</button><pre class="lic" hidden></pre>
@@ -284,8 +327,10 @@ export class Menu {
       html = `<div class="h">${t('menu.hControls')}</div>${help(this.actions.glyphs())}<button data-act="page" data-slot="main">${t('menu.back')}</button>`;
     }
     this.bodyEl.innerHTML = html;
-    this.el.querySelector('.panel')!.classList.toggle('wide', page === 'help' || page === 'guide' || page === 'load' || page === 'save' || page === 'credits');
-    this.focusables()[0]?.focus();
+    const panel = this.el.querySelector('.panel')!;
+    panel.classList.toggle('wide', page === 'help' || page === 'guide' || page === 'load' || page === 'save' || page === 'credits' || page === 'settings');
+    panel.classList.toggle('settings', page === 'settings');
+    (this.bodyEl.querySelector<HTMLElement>('.stabs button.on') ?? this.focusables()[0])?.focus();
   }
 
   /** the license texts of the software in the game (public/lizenzen.txt), under the credits */
@@ -311,6 +356,21 @@ export class Menu {
 
   private act(act: string, slot: SlotId | undefined, btn: HTMLElement) {
     if (act === 'page') { this.render(slot as unknown as Page); return; }
+    // the settings: another tab, a value picked, a switch flipped, the developer's panel
+    const item = this.items.get(slot as unknown as string);
+    if (act === 'stab') { this.settingsTab = slot as unknown as string; this.render('settings'); return; }
+    if (act === 'sset' && item?.kind === 'choice') {
+      item.set(btn.dataset.v!);
+      btn.parentElement!.querySelectorAll<HTMLElement>('.seg').forEach(b => b.classList.toggle('on', b.dataset.v === item.get()));
+      return;
+    }
+    if (act === 'stog' && item?.kind === 'toggle') {
+      item.set(!item.get());
+      btn.classList.toggle('on', item.get());
+      btn.textContent = item.get() ? t('set.on') : t('set.off');
+      return;
+    }
+    if (act === 'dev') { this.setDev(!this.devOn); btn.textContent = this.devOn ? t('set.devHide') : t('set.dev'); return; }
     if (act === 'licenses') { void this.showLicenses(btn); return; }
     if (act === 'diff') {
       this.difficulty = slot as unknown as Difficulty;
@@ -324,7 +384,6 @@ export class Menu {
     if (act === 'lang') { this.actions.language(OTHER_LANG); return; }
     if (act === 'resume') { this.actions.resume(); return; }
     if (act === 'continue') { const s = readSave('auto'); if (s) this.actions.load(s); return; }
-    if (act === 'settings') { this.setSettings(!this.settingsOn); btn.textContent = this.settingsOn ? t('menu.settingsHide') : t('menu.settings'); return; }
     if (act === 'random') { (this.el.querySelector('input[name=seed]') as HTMLInputElement).value = String(1 + Math.floor(Math.random() * 999998)); return; }
     if (act === 'start') {
       if (this.actions.inGame() && !this.confirm('start', btn, t('menu.confirmEnd'))) return;
@@ -373,9 +432,20 @@ export class Menu {
     if (Math.abs(stick) < 0.3) this.repeat = 0;
     if (step && list.length) list[(i + step + list.length) % list.length].focus();
     const cur = document.activeElement as HTMLInputElement | null;
-    if (cur?.type === 'range') {
-      const d = input.hit('ArrowRight', 'Pad.Right') ? 1 : input.hit('ArrowLeft', 'Pad.Left') ? -1 : 0;
-      if (d) { cur.value = String(Number(cur.value) + d); cur.dispatchEvent(new Event('input', { bubbles: true })); }
+    const d = input.hit('ArrowRight', 'Pad.Right') ? 1 : input.hit('ArrowLeft', 'Pad.Left') ? -1 : 0;
+    // left and right: a slider by its step, a choice to the next value
+    if (d && cur?.type === 'range') {
+      if (d > 0) cur.stepUp(); else cur.stepDown();
+      cur.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if (d && cur?.classList.contains('seg')) {
+      const segs = [...cur.parentElement!.querySelectorAll<HTMLElement>('.seg')], next = segs[segs.indexOf(cur) + d];
+      if (next) { next.click(); next.focus(); }
+    }
+    // the shoulder buttons: the settings' tabs
+    if (this.page === 'settings') {
+      const tabs = [...this.bodyEl.querySelectorAll<HTMLElement>('.stabs button')], on = tabs.findIndex(b => b.classList.contains('on'));
+      const tab = input.hit('Pad.RB') ? on + 1 : input.hit('Pad.LB') ? on - 1 : -1;
+      if (tab >= 0 && tab < tabs.length && tab !== on) tabs[tab].click();
     }
     if (input.hit('Pad.A') && cur && list.includes(cur)) cur.click();
     if (input.hit('KeyP', 'Pad.Start') && this.actions.inGame()) { this.actions.resume(); return; }
