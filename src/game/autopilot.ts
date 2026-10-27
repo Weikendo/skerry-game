@@ -175,7 +175,7 @@ export class UnitPilots {
 
   /**
    * Back into the stern dock: round the hull to a point behind the stern, then
-   * straight in along the centre line. The ship stops for it (on a waypoint
+   * straight in along the line of its own bay. The ship stops for it (on a waypoint
    * route it goes to "Langsam"); the player may speed it up again by hand.
    */
   private walrusDock(w: Walrus, dt: number): InputLike | null {
@@ -210,10 +210,10 @@ export class UnitPilots {
       st.homeRoute = null;
     }
     let tx: number, tz: number;
-    if (Math.abs(l.x) < 16 && l.z < -96 && l.z > -200) { tx = 0; tz = -90; }
+    if (Math.abs(l.x - w.dockX) < 6 && l.z < -96 && l.z > -200) { tx = w.dockX; tz = -90; }
     // (ahead of the bow first out to the side, or it would run into the stem)
     else if (l.z > -150 && Math.abs(l.x) < 75) { tx = Math.sign(l.x || 1) * 80; tz = l.z > c.model.stemZ ? l.z : Math.max(-165, l.z - 70); }
-    else { tx = 0; tz = -150; }
+    else { tx = w.dockX; tz = -150; }
     const p = c.localToWorld(tx, tz);
     return this.steer(w, st, p.x, p.z, dt);
   }

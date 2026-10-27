@@ -306,7 +306,10 @@ def stern(b: MB, d: MB, L: MB):
         L.box((DOCK_X - 0.35, ly - 0.3, lz), (DOCK_X - 0.05, ly + 0.3, lz + 1.2), C['lightWarm'])
         glow((-DOCK_X + 0.6, ly, lz + 0.6), C['lightWarm'], 5)
         glow((DOCK_X - 0.6, ly, lz + 0.6), C['lightWarm'], 5)
-    for x in range(-20, 21, 10):
+    # four bays, one for each Otter (DOCK_BAYS in src/game/walrus.ts): floating fenders part them, a lamp over each
+    for x in (-13.5, 0.0, 13.5):
+        b.box((x - 0.4, WATERLINE - 0.6, z + 4), (x + 0.4, WATERLINE + 0.7, DOCK_END - 2), {'side': C['hullLow'], 'top': C['accent']})
+    for x in (-20.25, -6.75, 6.75, 20.25):
         L.box((x - 1.5, DOCK_TOP - 0.15, DOCK_END - 4), (x + 1.5, DOCK_TOP - 0.05, DOCK_END - 3), C['lightWhite'])
     # the shelf over the stern door (it swings up underneath), with amber lamps along its edge and struts to the transom
     shelf = [(-30, -100.0), (-28, -105.5), (28, -105.5), (30, -100.0)]

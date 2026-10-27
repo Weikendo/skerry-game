@@ -2121,8 +2121,8 @@ function animateManta(m: Manta, dt: number) {
 }
 
 /**
- * Who is visible aboard: the stern dock shows one Walrus (the others wait in
- * the hangar); the Mantas wait below deck and show only once the lift brings them up.
+ * Who is visible aboard: the stern dock shows every Walrus in its own bay; the
+ * Mantas wait below deck and show only once the lift brings them up.
  */
 function hangarVisibility() {
   aboard(walruses, mantas);
@@ -2132,9 +2132,8 @@ function hangarVisibility() {
   foeSkuas.forEach((m, i) => { if (i >= omega.tune.skuas || (enemyShip.hp <= 0 && m.state === 'deck')) m.model.group.visible = false; });
 }
 function aboard(otters: Walrus[], skuas: Manta[]) {
-  const docked = otters.find(w => w.state === 'dock');
   for (const w of otters) {
-    w.model.group.visible = w.state !== 'zerstoert' && (w.state !== 'dock' || (w === docked && !otters.some(o => o.state === 'aussetzen' || o.state === 'andocken')));
+    w.model.group.visible = w.state !== 'zerstoert';
     showGear(w);
   }
   for (const m of skuas) {
