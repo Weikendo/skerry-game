@@ -4,6 +4,8 @@
 
 **Deutsch** · [English](#english)
 
+**Im Browser spielen: [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/)**
+
 Skerry ist ein Strategie- und Actionspiel auf hoher See, eine Hommage an **Carrier Command** (1988). Du führst den unbemannten Flugzeugträger **Stoorworm** durch ein Archipel in der Nordsee, eroberst mit Amphibienpanzern (Otter) und Senkrechtstartern (Skua) Inseln, baust ein Nachschubnetz auf und kämpfst gegen den abtrünnigen Träger **Nuckelavee** und seine KI Omega. Alles in Echtzeit, in einer frei befahrbaren 3D-Welt im Low-Poly-Stil, mit Tag und Nacht, Wetter und einem Bordcomputer, der spricht.
 
 | | |
@@ -13,7 +15,7 @@ Skerry ist ein Strategie- und Actionspiel auf hoher See, eine Hommage an **Carri
 
 ## Spielen
 
-- Läuft im Browser (am besten Chrome oder Edge) und als Mac- oder Windows-App.
+- Läuft im Browser, direkt unter [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/) (am besten Chrome oder Edge auf Mac oder PC), und als Mac- oder Windows-App zum Selbstbauen.
 - Steuerung mit Maus und Tastatur, Trackpad oder Gamepad. Die Einführung beim ersten Spiel und das Menü → Anleitung erklären alles Weitere.
 - Deutsch und Englisch, je nach Sprache des Systems; umschalten im Hauptmenü.
 
@@ -47,6 +49,8 @@ Skerry ist ein inoffizielles Fan-Remake. Es ist kein Produkt der Rechteinhaber v
 
 ## English
 
+**Play in the browser: [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/)**
+
 Skerry is a strategy and action game on the high seas, a homage to **Carrier Command** (1988). You command the unmanned aircraft carrier **Stoorworm** through an archipelago in the North Sea, capture islands with amphibious tanks (Otters) and VTOL jets (Skuas), build up a supply network and fight the rogue carrier **Nuckelavee** and its AI, Omega. All in real time, in a free-roaming low-poly 3D world with day and night, weather and a ship computer that talks.
 
 | | |
@@ -57,7 +61,7 @@ Skerry is a strategy and action game on the high seas, a homage to **Carrier Com
 
 ### Playing
 
-- Runs in the browser (Chrome or Edge recommended) and as a Mac or Windows app.
+- Runs in the browser, right at [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/) (Chrome or Edge on a Mac or PC recommended), and as a Mac or Windows app you can build yourself.
 - Mouse and keyboard, trackpad or gamepad. The tutorial in your first game and Menu → How to play explain the rest.
 - English and German, following the system language; switch in the main menu.
 
