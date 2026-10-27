@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import { Post } from './engine/post';
 import { GLOW_VIEW, type GlowPoints } from './engine/glow';
-import { Environment, WEATHER, WEATHER_LABELS, type WeatherName } from './world/environment';
+import { Environment, WEATHER_LABELS, weatherAt, weatherName, type WeatherName } from './world/environment';
 import { Sky } from './world/sky';
 import { SHADOW_LAYER, SLOPE } from './world/terrain';
 import { Archipelago } from './world/archipelago';
@@ -423,16 +423,16 @@ function addIslandCam(isl: string, bd: { type: string; x: number; y: number; z: 
 bases.forEach((b, i) => {
   for (const bd of b.placed) if (bd.type === 'funkmast' || bd.type === 'kommandozentrale') addIslandCam(world.islands[i].name, bd);
 });
-const DEFAULT_CAM: Record<Vehicle, string> = { traeger: 'traeger-bruecke', walrus: 'walrus-mast', manta: 'manta-lift', drohne: 'drohne-kamera' };
-/** "from the map straight into the cockpit" */
-const COCKPIT_CAM: Record<Vehicle, string> = { traeger: 'traeger-bruecke', walrus: 'walrus-fahrer', manta: 'manta-cockpit', drohne: 'drohne-kamera' };
-/** the Manta's best outside camera for its current phase (lift on deck, tail rig in the air) */
-const mantaOutsideCam = () => (manta.state === 'deck' || manta.state === 'start' || (manta.state === 'landung' && manta.landPhase >= 1)) ? 'manta-lift' : 'manta-heck';
+/** the first camera when the big picture switches to a unit: Otter and Skua from the cockpit */
+const DEFAULT_CAM: Record<Vehicle, string> = { traeger: 'traeger-bruecke', walrus: 'walrus-fahrer', manta: 'manta-cockpit', drohne: 'drohne-kamera' };
+/** the same, but a Skua under deck (in the hangar or on the lift) has nothing to see from its cockpit: the lift camera */
+const firstCam = (v: Vehicle) => v === 'manta' && manta.underDeck ? 'manta-lift' : DEFAULT_CAM[v];
 let lastMantaCam = 'manta-lift';
 function autoMantaCamera() {
-  // like a director on the bridge: cut between the lift and the tail camera, unless the pilot chose the cockpit
-  const want = mantaOutsideCam();
-  if (want !== lastMantaCam && (cams.current?.id === 'manta-lift' || cams.current?.id === 'manta-heck')) selectCam(want);
+  // like a director on the bridge: the lift camera while the Skua is under deck, the cockpit once it stands at the
+  // catapult, the lift again when it goes down after landing; unless the pilot chose another camera
+  const want = firstCam('manta');
+  if (want !== lastMantaCam && (cams.current?.id === 'manta-lift' || cams.current?.id === 'manta-cockpit')) selectCam(want);
   lastMantaCam = want;
 }
 function selectCam(id: string) {
@@ -454,7 +454,7 @@ function nextIslandCam(dir: number) {
 function setVehicle(v: Vehicle) {
   active = v;
   params.einheit = VEHICLE_NAMES[v];
-  selectCam(v === 'manta' ? mantaOutsideCam() : DEFAULT_CAM[v]);
+  selectCam(firstCam(v));
 }
 
 /** which Walrus / Manta the player drives: the cameras of that kind follow it */
@@ -535,16 +535,16 @@ function updateLighting() {
 
 const bufferSize = new THREE.Vector2();
 const darkness = () => Math.max(1 - env.dayness(), env.w.dark * 0.6);
-// ---------- rain on the window the camera looks through (src/engine/rainGlass.ts) ----------
-/** cameras behind glass: the bridge, the Skua's cockpit, the Otter's cab */
+// ---------- rain on the window or lens the camera looks through (src/engine/rainGlass.ts) ----------
+/** cameras behind glass: the bridge, the Skua's cockpit, the Otter's cab; all others are out in the rain with their lens */
 const GLASS_CAMS = new Set(['traeger-bruecke', 'manta-cockpit', 'walrus-fahrer']);
 /** the glass's clocks and the airstream over a Skua's canopy, all eased so nothing on the glass jumps */
 const wet = { time: 0, run: 0, pace: 1, angle: 0, flow: 0, blow: 0, cx: 0.9, cy: 0.5 };
 const camRight = new THREE.Vector3(), glassDown = new THREE.Vector3(), airDir = new THREE.Vector3();
-/** true (and the pass set up) while it rains and the camera looks through glass */
+/** true (and the pass set up) while it rains on the camera's window or lens */
 function rainOnGlass(dt: number): boolean {
   const id = cams.current?.id, rain = env.w.rain;
-  if (params.entwickler || !id || !GLASS_CAMS.has(id) || rain < 0.05) return false;
+  if (params.entwickler || !id || rain < 0.05) return false;
   const u = post.glass.uniforms, aspect = u.uAspect.value, ease = Math.min(1, dt * 3);
   camera.updateMatrixWorld();
   // they run down the glass (a banked cockpit turns where down is), the wind across it pushes them sideways and
@@ -577,6 +577,7 @@ function rainOnGlass(dt: number): boolean {
   u.uFlow.value = wet.flow;
   u.uBlow.value = wet.blow;
   u.uCentre.value.set(wet.cx, wet.cy);
+  u.uLens.value = GLASS_CAMS.has(id) ? 0 : 1;
   return true;
 }
 /** lights: dull by day, glowing at night and in bad weather */
@@ -648,10 +649,13 @@ function neutralToneMap(c: THREE.Color, exposure: number): THREE.Color {
   return c.lerp(new THREE.Color(newPeak, newPeak, newPeak), g);
 }
 const WEATHER_NAME = Object.fromEntries(Object.entries(WEATHER_LABELS).map(([label, w]) => [w, label])) as Record<WeatherName, string>;
-const WEATHER_NEWS: Record<WeatherName, [string, string]> = {
-  klar: [t('weather.news.klar'), ''], bewoelkt: [t('weather.news.bewoelkt'), ''], nebel: [t('weather.news.nebel'), ''], sturm: [t('weather.news.sturm'), 'bad'],
-};
-const weather = new WeatherSchedule(env, (w) => { params.wetter = WEATHER_NAME[w]; notify(...WEATHER_NEWS[w]); });
+/** the message when the weather changes: rain and storms by their strength */
+function weatherNews(w: WeatherName, s: number): [string, string] {
+  if (w === 'regen') return [t(s < 0.34 ? 'weather.news.regenLeicht' : s > 0.66 ? 'weather.news.regenStark' : 'weather.news.regen'), ''];
+  if (w === 'sturm') return [t(s > 0.66 ? 'weather.news.sturmSchwer' : 'weather.news.sturm'), 'bad'];
+  return [t(`weather.news.${w}`), ''];
+}
+const weather = new WeatherSchedule(env, (w, s) => { params.wetter = WEATHER_NAME[w]; notify(...weatherNews(w, s)); });
 
 // the developer's panel (Menü → Einstellungen → Spiel → Entwicklerwerkzeuge): time and weather set by hand, unit
 // and camera, the test tools and the world; the player's settings are on the menu's own page (settingsTabs)
@@ -1158,7 +1162,7 @@ function cockpit(u: UnitId) {
   setDevCamera(false);
   pickUnit(u);
   setVehicle(kindOf(u));
-  selectCam(COCKPIT_CAM[kindOf(u)]);
+  selectCam(firstCam(kindOf(u)));
 }
 const unitOf = (u: UnitId) => kindOf(u) === 'walrus' ? walruses[indexOf(u)] : kindOf(u) === 'manta' ? mantas[indexOf(u)] : null;
 // ---------- routes: more waypoints after the current one (Shift+click on the map) ----------
@@ -1575,7 +1579,7 @@ function enemyStatus(): { cls: string; text: string } {
   if (c.last) return { cls: 'warn', text: t('enemy.lastSeen', { ago: agoText(c.last.hours) }) };
   return { cls: '', text: t('enemy.unknown') };
 }
-map.status = () => ({ time: clockText(), date: dateText(), weather: params.wetter, weatherId: env.weather, enemy: enemyStatus() });
+map.status = () => ({ time: clockText(), date: dateText(), weather: weatherName(env.weather, env.strength), weatherId: env.weather, enemy: enemyStatus() });
 map.enemyUnits = () => [...foeContacts].filter(([v, c]) => c.visible && foeOut(v)).map(([v]) => (v instanceof Walrus
   ? { kind: 'walrus' as const, name: v.name, x: v.pos.x, z: v.pos.z, heading: v.heading }
   : { kind: 'manta' as const, name: v.name, x: v.pos.x, z: v.pos.z, heading: v.yaw }));
@@ -1594,19 +1598,19 @@ map.info = () => {
   const note = !params.zeitLaeuft ? t('wx.stopped') : params.zeitraffer > 1 ? t('info.timewarp', { n: params.zeitraffer }) : '';
   const forecast = !weather.enabled ? t('wx.none') : weather.plan.slice(0, 2).map(f => t('wx.item', {
     when: params.zeitLaeuft ? t('wx.at', { time: clockAt(f.in) }) : t('wx.in', { min: Math.max(1, Math.round(f.in / 60)) }),
-    weather: WEATHER_NAME[f.weather], wind: windShort(f.wind, WEATHER[f.weather].wind),
+    weather: weatherName(f.weather, f.strength), wind: windShort(f.wind, weatherAt(f.weather, f.strength).wind),
   })).join(' · ');
   // the wind over the next 24 game hours: six slots of 4 hours from the next full hour, each with its strongest wind
   const perHour = 60 / params.tempo, next = Math.ceil(env.time + 1e-6), slots: string[] = [];
   for (let i = 0; i < 6; i++) {
-    const hours = next - env.time + i * 4, at = weather.strongest(Math.max(0, hours - (i ? 0 : next - env.time)) * perHour, (hours + 4) * perHour, x => WEATHER[x].wind);
-    const ms = WEATHER[at.weather].wind, deg = Math.atan2(Math.cos(at.wind), -Math.sin(at.wind)) * 180 / Math.PI;
+    const hours = next - env.time + i * 4, at = weather.strongest(Math.max(0, hours - (i ? 0 : next - env.time)) * perHour, (hours + 4) * perHour, (x, s) => weatherAt(x, s).wind);
+    const ms = weatherAt(at.weather, at.strength).wind, deg = Math.atan2(Math.cos(at.wind), -Math.sin(at.wind)) * 180 / Math.PI;
     const label = params.zeitLaeuft ? `${String((next + i * 4) % 24).padStart(2, '0')}:00` : t('wx.slotIn', { h: Math.round(hours) });
     const level = ms < 4 ? 'calm' : ms < 9 ? 'light' : ms < 15 ? 'fresh' : 'storm';
-    slots.push(`<div class="ws ${level}" title="${windShort(at.wind, ms)} · ${WEATHER_NAME[at.weather]}"><small>${label}</small>` +
+    slots.push(`<div class="ws ${level}" title="${windShort(at.wind, ms)} · ${weatherName(at.weather, at.strength)}"><small>${label}</small>` +
       `<span><svg viewBox="0 0 14 14" style="transform:rotate(${deg.toFixed(0)}deg)"><path d="M7 1.5 11 9H8v3.5H6V9H3z"/></svg><b>${num(ms * 1.943844)}</b></span></div>`);
   }
-  return `<div class="wxnow"><b class="wxclock">${clockText()}</b>${note ? `<small>${note}</small>` : ''}<span>${weatherIcon(env.weather)}<b>${params.wetter}</b></span>` +
+  return `<div class="wxnow"><b class="wxclock">${clockText()}</b>${note ? `<small>${note}</small>` : ''}<span>${weatherIcon(env.weather)}<b>${weatherName(env.weather, env.strength)}</b></span>` +
     `<span>${t('wx.wind')} <b>${windShort(env.windAngle, w.wind)}</b></span><span>${t('wx.visibility')} <b>${km(w.fogFar, w.fogFar < 3000 ? 1 : 0)}</b></span>` +
     `<span>${t('wx.sea')} <b>${sea}</b></span></div>` +
     `<div class="wxfc"><span>${t('wx.forecast')}</span>${forecast}</div>` +
@@ -2212,10 +2216,11 @@ const wall = new MonitorWall(deck.slots, {
     map.select(u); map.centreOn(u);
   },
   full(g) {
+    // an Otter or a Skua goes big from its cockpit; the ship's screen keeps the camera it shows
     const id = monCamId(g);
     cockpit(monUnit(g));
     setDevCamera(false);
-    selectCam(id);
+    if (g === 'ship') selectCam(id);
   },
   button(g, id) {
     if (g === 'ship') {
@@ -2652,7 +2657,7 @@ function present(dt: number, simDt: number) {
   for (const b of bases) b.group.visible = viewers.some(p => b.island.distanceTo(p.x, p.z) < Math.min(7000, farLimit));
   ocean.update(env, camera);
   clouds.update(env, simDt, focus);
-  rain.update(env, camera);
+  rain.update(env, camera, renderer.getDrawingBufferSize(bufferSize), renderer.getPixelRatio());
   nightLights(carrierModel.lights, carrierModel.glow);
   nightLights(enemyModel.lights, enemyModel.glow);
   for (const w of [...walruses, ...foeOtters]) nightLights(w.model.lights, w.model.glow);
@@ -2810,13 +2815,11 @@ function endGame(won: boolean, reason: 'omega' | 'inseln' | 'traeger') {
   menu.showEnd({ won, reason, difficulty: game.difficulty, time: playStats.time, stats: { ...stats }, goOn: won && reason === 'omega' });
 }
 let started = false, leaving = false;
-/** the title lies in a storm; a game begins in its own weather */
-let titleStorm = false;
 const ownedIslands = () => bases.filter(b => b.team === 'spieler').length;
 
 function collectState() {
   return {
-    env: { time: env.time, day: env.day, elapsed: env.elapsed, weather: env.weather, windAngle: env.windAngle, windTarget: env.windTarget },
+    env: { time: env.time, day: env.day, elapsed: env.elapsed, weather: env.weather, strength: env.strength, windAngle: env.windAngle, windTarget: env.windTarget },
     params: { zeitLaeuft: params.zeitLaeuft, tempo: params.tempo, zeitraffer: params.zeitraffer, zufallsWetter: params.zufallsWetter },
     weather: weather.saveState(),
     active, camera: cams.current?.id ?? '', current: { walrus: walrus.index, manta: manta.index },
@@ -2848,7 +2851,7 @@ function makeSave(name: string): SaveGame {
 /** a save of this world, applied before the first frame (or on the title screen) */
 function applyState(save: SaveGame) {
   const s = save.data as GameState;
-  env.time = s.env.time; env.day = s.env.day ?? 0; env.elapsed = s.env.elapsed; env.setWeather(s.env.weather, true);
+  env.time = s.env.time; env.day = s.env.day ?? 0; env.elapsed = s.env.elapsed; env.setWeather(s.env.weather, true, 6, undefined, s.env.strength ?? 0.5);
   if (s.env.windAngle !== undefined) { env.windAngle = s.env.windAngle; env.windTarget = s.env.windTarget; }
   // the clock runs after loading too (T stops it for the session; saves from before it ran by default kept it stopped)
   Object.assign(params, s.params, { zeitLaeuft: true });
@@ -2924,11 +2927,9 @@ function startGame(fresh: boolean, difficulty: Difficulty = 'normal', withTutori
     if (withTutorial) tutorial.start(); else tutorial.stop();
   }
   music.stop();
-  // the title's storm blows over at once: a new game starts in clear weather (a loaded one brought its own)
-  if (titleStorm) {
-    titleStorm = false;
-    if (fresh) { env.setWeather('klar', true); params.wetter = WEATHER_NAME.klar; weather.restart(); }
-  }
+  // a new game always starts in heavy rain, as the North Sea greets you (the title's storm eases into it at once; a
+  // loaded game brings its own weather)
+  if (fresh) { env.setWeather('regen', true, 6, undefined, 0.85); params.wetter = WEATHER_NAME.regen; weather.restart(); }
   // a new game starts late in the morning, so there is a day ahead before it gets dark (the title stays at 17:00)
   if (fresh) { carrier.throttle = 3; setVehicle('traeger'); playStats.time = playStats.lastAuto = 0; env.time = params.zeit = START_TIME; }
   if (fresh || !enemyContact.last) radioIntel();
@@ -3034,8 +3035,7 @@ loadSettings();
   } else {
     // title screen: the ship lies still in a storm, with rain and a heavy sea, until the game starts
     carrier.throttle = 1; carrier.speed = 0;
-    titleStorm = true;
-    env.setWeather('sturm', true); params.wetter = WEATHER_NAME.sturm;
+    env.setWeather('sturm', true, 6, undefined, 0.7); params.wetter = WEATHER_NAME.sturm;
     menu.show('main');
   }
 }

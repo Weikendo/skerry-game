@@ -52,12 +52,13 @@ export function windText(x: number, z: number): string {
   const bft = BEAUFORT.findIndex(v => ms < v);
   return t('wind.label', { kn: num(ms * KN), from, bft: bft < 0 ? 12 : bft });
 }
-/** a small weather symbol (sun, cloud, fog, storm) for the map */
+/** a small weather symbol (sun, cloud, fog, rain, storm) for the map */
 export function weatherIcon(id: string): string {
   const cloud = '<path d="M4.5 11a3.5 3.5 0 0 1 .3-7A4.5 4.5 0 0 1 13.5 5a3 3 0 0 1-.3 6z"/>';
   const body = id === 'klar' ? '<circle cx="9" cy="6" r="3.3"/><path d="M9 0v1.6M9 10.4V12M3 6H1.4M16.6 6H15M4.8 1.8l1.1 1.1M12.1 9.1l1.1 1.1M4.8 10.2l1.1-1.1M12.1 2.9l1.1-1.1" stroke="currentColor" stroke-width="1.2" fill="none"/>'
     : id === 'nebel' ? '<rect x="1" y="2" width="16" height="1.6" rx=".8"/><rect x="3" y="5.2" width="14" height="1.6" rx=".8"/><rect x="1" y="8.4" width="13" height="1.6" rx=".8"/>'
-      : id === 'sturm' ? cloud + '<path d="M9.5 7.5 7.5 11h2l-1 3 3.5-4.5h-2l1-2z" fill="#f2c21b"/>' : cloud;
+      : id === 'sturm' ? cloud + '<path d="M9.5 7.5 7.5 11h2l-1 3 3.5-4.5h-2l1-2z" fill="#f2c21b"/>'
+        : id === 'regen' ? '<path d="M4.5 9a3.5 3.5 0 0 1 .3-7A4.5 4.5 0 0 1 13.5 3a3 3 0 0 1-.3 6z"/><path d="M6 10.2 5.2 12.4M9.2 10.2 8.4 12.4M12.4 10.2 11.6 12.4" stroke="#7cc4e8" stroke-width="1.2" stroke-linecap="round"/>' : cloud;
   return `<svg class="wxi" viewBox="0 0 18 13">${body}</svg>`;
 }
 

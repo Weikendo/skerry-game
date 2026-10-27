@@ -2,24 +2,26 @@ import type { Environment, WeatherName } from './environment';
 
 // how long a weather stays, in simulation seconds (at 1 game minute per second: game hours)
 const STAY: Record<WeatherName, [number, number]> = {
-  klar: [480, 900], bewoelkt: [300, 600], nebel: [180, 420], sturm: [120, 300],
+  klar: [240, 480], bewoelkt: [360, 780], nebel: [180, 420], regen: [240, 600], sturm: [150, 360],
 };
-// what may follow (weights); storms grow out of clouds and blow over into clouds
+// what may follow (weights). The North Sea: mostly grey, often rain, sunshine seldom and short. Rain grows out of
+// clouds, storms out of clouds and rain, and they blow over into rain and clouds.
 const NEXT: Record<WeatherName, [WeatherName, number][]> = {
-  klar: [['bewoelkt', 0.65], ['nebel', 0.2], ['klar', 0.15]],
-  bewoelkt: [['klar', 0.45], ['sturm', 0.3], ['nebel', 0.15], ['bewoelkt', 0.1]],
-  nebel: [['klar', 0.55], ['bewoelkt', 0.45]],
-  sturm: [['bewoelkt', 0.75], ['klar', 0.25]],
+  klar: [['bewoelkt', 0.7], ['nebel', 0.15], ['regen', 0.15]],
+  bewoelkt: [['regen', 0.4], ['bewoelkt', 0.18], ['sturm', 0.15], ['nebel', 0.15], ['klar', 0.12]],
+  nebel: [['bewoelkt', 0.6], ['regen', 0.3], ['klar', 0.1]],
+  regen: [['bewoelkt', 0.45], ['sturm', 0.3], ['regen', 0.15], ['nebel', 0.1]],
+  sturm: [['regen', 0.55], ['bewoelkt', 0.4], ['klar', 0.05]],
 };
 /** seconds for a natural weather change to blend in */
 const BLEND = 90;
 
-/** a weather change that is coming: what, in how many simulation seconds, and where the wind will blow to */
-export interface Forecast { weather: WeatherName; in: number; wind: number }
+/** a weather change that is coming: what, how strong (0..1), in how many simulation seconds, and where the wind will blow to */
+export interface Forecast { weather: WeatherName; strength: number; in: number; wind: number }
 
 /**
- * Random weather that changes slowly: sunshine lasts longest, storms are short,
- * fog is likelier in the early morning. The next changes are planned ahead,
+ * Random weather that changes slowly: mostly clouds and rain, storms are short, sunshine seldom,
+ * fog is likelier in the early morning. Each spell rolls its own strength. The next changes are planned ahead,
  * with the wind each front brings, so the game can forecast them. Picking a
  * weather by hand keeps it for that weather's usual time and plans anew.
  */
@@ -32,7 +34,7 @@ export class WeatherSchedule {
   /** how far ahead (simulation seconds) the plan reaches: the game sets it to 24 game hours */
   horizon = 1440;
 
-  constructor(private env: Environment, private onChange: (w: WeatherName) => void) {
+  constructor(private env: Environment, private onChange: (w: WeatherName, strength: number) => void) {
     this.left = this.duration(env.weather);
     this.extend();
   }
@@ -61,7 +63,7 @@ export class WeatherSchedule {
       }
       // a front brings a new wind: up to a quarter turn, in a storm more
       const turn = (Math.random() * 2 - 1) * Math.PI / 2 * (from === 'sturm' ? 1.4 : 1);
-      this.plan.push({ weather: from, in: at, wind: wind + turn });
+      this.plan.push({ weather: from, strength: Math.random(), in: at, wind: wind + turn });
     }
   }
 
@@ -75,27 +77,27 @@ export class WeatherSchedule {
   get remaining(): number { return this.plan[0]?.in ?? this.left; }
 
   /** of all weathers planned between `from` and `to` seconds from now, the one with the strongest wind */
-  strongest(from: number, to: number, wind: (w: WeatherName) => number): { weather: WeatherName; wind: number } {
+  strongest(from: number, to: number, wind: (w: WeatherName, strength: number) => number): { weather: WeatherName; strength: number; wind: number } {
     let best = this.at(from);
     if (!this.enabled) return best;
     for (const f of this.plan) {
       if (f.in <= from) continue;
       if (f.in >= to) break;
-      if (wind(f.weather) > wind(best.weather)) best = { weather: f.weather, wind: f.wind };
+      if (wind(f.weather, f.strength) > wind(best.weather, best.strength)) best = { weather: f.weather, strength: f.strength, wind: f.wind };
     }
     return best;
   }
 
-  /** the weather and where its wind blows to `seconds` from now (as planned) */
-  at(seconds: number): { weather: WeatherName; wind: number } {
-    let weather = this.env.weather, wind = this.env.windTarget;
-    if (!this.enabled) return { weather, wind };
+  /** the weather, its strength and where its wind blows to `seconds` from now (as planned) */
+  at(seconds: number): { weather: WeatherName; strength: number; wind: number } {
+    let weather = this.env.weather, strength = this.env.strength, wind = this.env.windTarget;
+    if (!this.enabled) return { weather, strength, wind };
     this.extend();
     for (const f of this.plan) {
       if (f.in > seconds) break;
-      weather = f.weather; wind = f.wind;
+      weather = f.weather; strength = f.strength; wind = f.wind;
     }
-    return { weather, wind };
+    return { weather, strength, wind };
   }
 
   update(dt: number) {
@@ -104,8 +106,8 @@ export class WeatherSchedule {
     const next = this.plan[0];
     if (!next || next.in > 0) return;
     this.plan.shift();
-    this.env.setWeather(next.weather, false, BLEND, next.wind);
-    this.onChange(next.weather);
+    this.env.setWeather(next.weather, false, BLEND, next.wind, next.strength);
+    this.onChange(next.weather, next.strength);
     this.left = 0;
     this.extend();
   }
@@ -114,7 +116,8 @@ export class WeatherSchedule {
   saveState() { return { left: this.left, enabled: this.enabled, plan: this.plan.map(f => ({ ...f })) }; }
   loadState(s: ReturnType<WeatherSchedule['saveState']>) {
     this.left = s.left; this.enabled = s.enabled;
-    this.plan = s.plan ? s.plan.map(f => ({ ...f })) : [];
+    // (saves from before the strengths had none: the middle)
+    this.plan = s.plan ? s.plan.map(f => ({ ...f, strength: f.strength ?? 0.5 })) : [];
     if (!this.plan.length) this.extend();
   }
 }

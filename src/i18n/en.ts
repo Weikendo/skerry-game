@@ -89,7 +89,11 @@ export const en = {
   'weather.klar': 'Clear',
   'weather.bewoelkt': 'Overcast',
   'weather.nebel': 'Fog',
+  'weather.regen': 'Rain',
   'weather.sturm': 'Storm',
+  'weather.regenLeicht': 'Light rain',
+  'weather.regenStark': 'Heavy rain',
+  'weather.sturmSchwer': 'Severe storm',
   // ---- goods (stores) ----
   'goodUnit.fuel': 'units (tank {tank})',
   'goodUnit.piece': 'pieces',
@@ -667,7 +671,11 @@ export const en = {
   'weather.news.klar': 'The weather is clearing',
   'weather.news.bewoelkt': 'Clouds are rolling in',
   'weather.news.nebel': 'Fog is coming in – visibility is dropping',
+  'weather.news.regen': 'It is starting to rain',
+  'weather.news.regenLeicht': 'Light rain is setting in',
+  'weather.news.regenStark': 'Heavy rain is moving in',
   'weather.news.sturm': 'A storm is brewing!',
+  'weather.news.sturmSchwer': 'A severe storm is brewing!',
   // ---- settings panel (lil-gui) ----
   'gui.settings': 'Settings',
   'gui.timeWeather': 'Time & weather',

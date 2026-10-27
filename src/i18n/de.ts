@@ -90,7 +90,11 @@ export const de = {
   'weather.klar': 'Klar',
   'weather.bewoelkt': 'Bewölkt',
   'weather.nebel': 'Nebel',
+  'weather.regen': 'Regen',
   'weather.sturm': 'Sturm',
+  'weather.regenLeicht': 'Leichter Regen',
+  'weather.regenStark': 'Starker Regen',
+  'weather.sturmSchwer': 'Schwerer Sturm',
   // ---- goods (stores) ----
   'goodUnit.fuel': 'Einheiten (Tank {tank})',
   'goodUnit.piece': 'Stück',
@@ -668,7 +672,11 @@ export const de = {
   'weather.news.klar': 'Das Wetter klart auf',
   'weather.news.bewoelkt': 'Es zieht zu',
   'weather.news.nebel': 'Nebel zieht auf – die Sicht sinkt',
+  'weather.news.regen': 'Es fängt an zu regnen',
+  'weather.news.regenLeicht': 'Leichter Regen setzt ein',
+  'weather.news.regenStark': 'Starker Regen zieht auf',
   'weather.news.sturm': 'Sturm zieht auf!',
+  'weather.news.sturmSchwer': 'Schwerer Sturm zieht auf!',
   // ---- settings panel (lil-gui) ----
   'gui.settings': 'Einstellungen',
   'gui.timeWeather': 'Zeit & Wetter',

@@ -24,6 +24,7 @@ const FLIGHT_TIME = 8 * 60;   // s on a full battery
 const CHARGE_TIME = 90;       // s from empty to full on the pad
 const RETURN_AT = 0.22;       // battery level for the automatic return
 const TAKEOFF_H = 22;         // m above the pad before the pilot takes over
+const WORK_H = 120;           // m above sea level it then climbs on to by itself (the autopilot's lowest cruise)
 const LEAN = 0.6;             // a big airframe leans less into the motion than a small quad
 
 export const DRONE_KEYS = {
@@ -72,6 +73,8 @@ export class Drone implements Target {
   private rollVis = 0;
   private startY = 0;
   private holdAt: THREE.Vector2 | null = null;
+  /** the height it climbs on to after the take-off, until the pilot climbs or sinks (null: it holds its height) */
+  private climbTo: number | null = null;
 
   constructor(readonly model: DroneModel, private ground: Ground, private env: Environment, private carrier: CarrierController) {
     this.placeOnPad();
@@ -196,7 +199,7 @@ export class Drone implements Target {
         // vertical take-off, riding along with the carrier
         this.startY = Math.min(TAKEOFF_H, this.startY + 4 * dt);
         this.placeOnPad(this.startY);
-        if (this.startY >= TAKEOFF_H) { this.state = 'flug'; this.say(t('drone.airborne')); }
+        if (this.startY >= TAKEOFF_H) { this.state = 'flug'; this.climbTo = WORK_H; this.say(t('drone.airborne')); }
         break;
       }
       case 'flug':
@@ -234,7 +237,14 @@ export class Drone implements Target {
       if (!this.holdAt) this.holdAt = new THREE.Vector2(this.pos.x, this.pos.z);
       want.set((this.holdAt.x - this.pos.x) * 0.6, 0, (this.holdAt.y - this.pos.z) * 0.6).clampLength(0, MAX_SPEED);
     } else this.holdAt = null;
-    this.steer(dt, want, climb * CLIMB);
+    // after the take-off it climbs on to its working height, unless the pilot climbs or sinks
+    if (climb !== 0) this.climbTo = null;
+    let vy = climb * CLIMB;
+    if (this.climbTo !== null) {
+      vy = THREE.MathUtils.clamp((this.climbTo - this.pos.y) * 0.5, -CLIMB, CLIMB);
+      if (Math.abs(this.climbTo - this.pos.y) < 1) this.climbTo = null;
+    }
+    this.steer(dt, want, vy);
   }
 
   private steer(dt: number, want: THREE.Vector3, vy: number) {

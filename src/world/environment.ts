@@ -3,7 +3,7 @@ import { clamp, lerp, smoothstep } from '../engine/noise';
 import { PAL } from '../engine/palette';
 import { t } from '../i18n';
 
-export type WeatherName = 'klar' | 'bewoelkt' | 'nebel' | 'sturm';
+export type WeatherName = 'klar' | 'bewoelkt' | 'nebel' | 'regen' | 'sturm';
 
 export interface WeatherParams {
   cover: number;     // cloud amount 0..1
@@ -21,12 +21,39 @@ export const WEATHER: Record<WeatherName, WeatherParams> = {
   klar:     { cover: 0.28, dark: 0.0,  fogNear: 400,  fogFar: 11000, sun: 1.0,  waves: 1.0, sea: 0,    rain: 0, wind: 6 },
   bewoelkt: { cover: 0.75, dark: 0.3,  fogNear: 300,  fogFar: 8000,  sun: 0.5,  waves: 1.6, sea: 0.4,  rain: 0, wind: 10 },
   nebel:    { cover: 0.45, dark: 0.15, fogNear: 40,   fogFar: 1300,  sun: 0.35, waves: 0.6, sea: 0.3,  rain: 0, wind: 2 },
-  sturm:    { cover: 1.0,  dark: 0.8,  fogNear: 250,  fogFar: 4200,  sun: 0.18, waves: 3.1, sea: 1,    rain: 1, wind: 22 },
+  regen:    { cover: 0.95, dark: 0.65, fogNear: 250,  fogFar: 5800,  sun: 0.24, waves: 1.85, sea: 0.7, rain: 0.52, wind: 11 },
+  sturm:    { cover: 1.0,  dark: 0.8,  fogNear: 250,  fogFar: 4200,  sun: 0.18, waves: 3.0, sea: 1,    rain: 0.82, wind: 21 },
 };
 
-export const WEATHER_LABELS: Record<string, WeatherName> = {
-  [t('weather.klar')]: 'klar', [t('weather.bewoelkt')]: 'bewoelkt', [t('weather.nebel')]: 'nebel', [t('weather.sturm')]: 'sturm',
+/**
+ * Every spell of weather has its own strength (0 mild .. 1 heavy, rolled by the WeatherSchedule): it moves these
+ * values between the two ends, from a drizzle to a downpour, from a gale to a heavy storm. The others stay as in
+ * WEATHER, which is the middle.
+ */
+const RANGE: Partial<Record<WeatherName, Partial<Record<keyof WeatherParams, [number, number]>>>> = {
+  klar: { cover: [0.15, 0.4], wind: [3, 9] },
+  bewoelkt: { cover: [0.6, 0.9], dark: [0.2, 0.42], wind: [6, 14], waves: [1.3, 1.9] },
+  nebel: { fogFar: [1800, 800], fogNear: [60, 25] },
+  regen: { rain: [0.3, 0.8], dark: [0.58, 0.72], fogFar: [7500, 4200], sun: [0.28, 0.19], waves: [1.5, 2.2], wind: [7, 15] },
+  sturm: { rain: [0.65, 1], dark: [0.68, 0.92], fogFar: [5200, 3000], sun: [0.24, 0.12], waves: [2.6, 3.4], wind: [16, 26] },
 };
+/** a weather's values at a strength 0..1 */
+export function weatherAt(name: WeatherName, strength = 0.5): WeatherParams {
+  const p = { ...WEATHER[name] };
+  for (const [key, [a, b]] of Object.entries(RANGE[name] ?? {}) as [keyof WeatherParams, [number, number]][]) p[key] = lerp(a, b, strength);
+  return p;
+}
+
+export const WEATHER_LABELS: Record<string, WeatherName> = {
+  [t('weather.klar')]: 'klar', [t('weather.bewoelkt')]: 'bewoelkt', [t('weather.nebel')]: 'nebel', [t('weather.regen')]: 'regen', [t('weather.sturm')]: 'sturm',
+};
+/** the weather's name with its strength where it shows: light or heavy rain, a heavy storm */
+export function weatherName(name: WeatherName, strength = 0.5): string {
+  if (name === 'regen' && strength < 0.34) return t('weather.regenLeicht');
+  if (name === 'regen' && strength > 0.66) return t('weather.regenStark');
+  if (name === 'sturm' && strength > 0.66) return t('weather.sturmSchwer');
+  return t(`weather.${name}`);
+}
 
 interface SkyKey {
   t: number;
@@ -79,7 +106,11 @@ export class Environment {
   day = 0;
   timeSpeed = 0;        // game hours per real second
   weather: WeatherName = 'klar';
+  /** how strong the current weather is, 0..1 (see weatherAt) */
+  strength = 0.5;
   readonly w: WeatherParams = { ...WEATHER.klar };
+  /** where the weather's values ease to */
+  private target: WeatherParams = { ...WEATHER.klar };
   elapsed = 0;
   /**
    * Where the wind blows to, as an angle in the x/z plane (0 = east, π/2 = south);
@@ -116,12 +147,15 @@ export class Environment {
 
   /** `seconds`: how long the change takes (by hand quick, natural changes slow) */
   /** `wind`: where the new weather's wind will blow to (from the forecast); a change by hand turns it at random */
-  setWeather(name: WeatherName, immediate = false, seconds = 6, wind?: number) {
+  /** `strength`: how strong it is, 0 mild .. 1 heavy */
+  setWeather(name: WeatherName, immediate = false, seconds = 6, wind?: number, strength = 0.5) {
     if (wind !== undefined) this.windTarget = wind;
     else if (!immediate && name !== this.weather) this.windTarget = this.windAngle + (Math.random() * 2 - 1) * Math.PI / 2 * (name === 'sturm' ? 1.4 : 1);
     this.weather = name;
+    this.strength = strength;
+    this.target = weatherAt(name, strength);
     this.blendTau = seconds / 2.4;
-    if (immediate) Object.assign(this.w, WEATHER[name]);
+    if (immediate) Object.assign(this.w, this.target);
   }
   private blendTau = 2.5;
 
@@ -132,7 +166,7 @@ export class Environment {
     this.time = hours % 24;
 
     // ease weather parameters towards the target
-    const target = WEATHER[this.weather];
+    const target = this.target;
     const k = 1 - Math.exp(-dt / this.blendTau);
     for (const key of Object.keys(target) as (keyof WeatherParams)[]) this.w[key] = lerp(this.w[key], target[key], k);
     // the wind wanders a little every few minutes and eases towards its new direction

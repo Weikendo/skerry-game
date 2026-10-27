@@ -131,6 +131,11 @@ export class Manta implements Target {
     return this.state === 'deck' || (this.state === 'start' && this.startPhase === 0);
   }
 
+  /** in the hangar or on the lift going up or down: there is nothing to see from the cockpit */
+  get underDeck(): boolean {
+    return this.state === 'deck' || (this.state === 'start' && this.startPhase < 2) || (this.state === 'landung' && this.landPhase >= 3);
+  }
+
   /** the lift takes one aircraft at a time: a catapult start or the end of a landing */
   get liftBusy(): boolean {
     return this.fleet.some(o => o !== this && (o.state === 'start' || (o.state === 'landung' && o.landPhase >= 1)));

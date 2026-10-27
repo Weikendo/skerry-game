@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 
 /**
- * Rain on the window the camera looks through (bridge, cockpit, cab): a full-screen pass over the rendered
+ * Rain on the window the camera looks through (bridge, cockpit, cab), or on the lens of a camera outside
+ * (`uLens` 1: fewer, bigger drops, out of focus, seldom running): a full-screen pass over the rendered
  * scene. Small drops sit on the glass, appear and dry again; bigger ones run down in streaks and leave droplets
  * behind. On the canopy of a flying Skua the airstream takes over: it blows the drops outwards in all directions
  * from where it meets the glass, the further out the faster, in long streaks. Each drop is a little lens: it shows
@@ -24,13 +25,14 @@ export const RainGlassShader = {
     uFlow: { value: 0 },
     uBlow: { value: 0 },
     uCentre: { value: new THREE.Vector2(16 / 18, 0.5) },
+    uLens: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float uTime, uRun, uRain, uAngle, uAspect, uLight, uFlow, uBlow;
+    uniform float uTime, uRun, uRain, uAngle, uAspect, uLight, uFlow, uBlow, uLens;
     uniform vec2 uCentre;
     varying vec2 vUv;
 
@@ -44,14 +46,15 @@ export const RainGlassShader = {
       float life = fract(t * 0.07 + n * 9.0);
       float r = mix(0.1, 0.24, hash(id + 1.7)) * smoothstep(0.0, 0.04, life) * smoothstep(1.0, 0.7, life);
       vec2 d = f - c;
-      float m = smoothstep(r, r * 0.7, length(d)) * step(n, uRain * 0.85);
+      // (on a lens they are out of focus: soft all the way in, and fewer)
+      float m = smoothstep(r, r * mix(0.7, 0.2, uLens), length(d)) * step(n, uRain * mix(0.85, 0.65, uLens));
       return vec3(d / max(r, 1e-3), m);
     }
 
     // drops running down in columns, each leaving droplets behind; they go by the glass's clock, so never back up
     vec3 runners(vec2 st, float cols, float run, float seed) {
       float col = floor(st.x * cols), n = hash(vec2(col, seed));
-      if (n > uRain * 0.75) return vec3(0.0);
+      if (n > uRain * 0.75 * (1.0 - 0.6 * uLens)) return vec3(0.0);
       float x = fract(st.x * cols) - 0.5;
       // the head slides down at its own pace, stopping now and then (water on glass gathers, then runs)
       float tt = run * (0.04 + n * 0.08) + n * 13.0;
@@ -110,8 +113,8 @@ export const RainGlassShader = {
       vec2 rs = mat2(ca, -sa, sa, ca) * (st - vec2(uAspect * 0.5, 0.5)) + vec2(uAspect * 0.5, 0.5);
       // in the airstream few drops stay put
       float sit = mix(1.0, 0.5, uFlow);
-      vec3 a = dots(st, 22.0, uTime);
-      vec3 b = dots(st + 7.3, 41.0, uTime * 1.3);
+      vec3 a = dots(st, mix(22.0, 10.0, uLens), uTime);
+      vec3 b = dots(st + 7.3, mix(41.0, 17.0, uLens), uTime * 1.3);
       // the strongest drop here (sheen: one the airstream drew out into a streak)
       vec3 d = vec3(a.xy, a.z * sit);
       float sheen = 0.0;
@@ -132,17 +135,17 @@ export const RainGlassShader = {
       }
       float m = d.z;
       // a lens: the picture behind it shifted against its slope and softened (a thin streak bends it more)
-      vec2 off = -d.xy * m * vec2(0.012 / uAspect, 0.016) * (1.0 + sheen);
+      vec2 off = -d.xy * m * vec2(0.012 / uAspect, 0.016) * (1.0 + sheen + uLens);
       vec4 col = texture2D(tDiffuse, vUv + off);
       if (m > 0.01) {
-        vec2 px = vec2(0.003 / uAspect, 0.003) * m;
+        vec2 px = vec2(0.003 / uAspect, 0.003) * m * mix(1.0, 3.0, uLens);
         col = (col * 2.0 + texture2D(tDiffuse, vUv + off + px) + texture2D(tDiffuse, vUv + off - px)
           + texture2D(tDiffuse, vUv + off + vec2(px.x, -px.y)) + texture2D(tDiffuse, vUv + off + vec2(-px.x, px.y))) / 6.0;
         // a darker rim and a glint where its top catches the light
         float edge = smoothstep(0.55, 1.0, length(d.xy));
-        col.rgb *= 1.0 - 0.28 * edge * m;
+        col.rgb *= 1.0 - 0.28 * edge * m * (1.0 - 0.5 * uLens);
         float glint = pow(max(0.0, dot(normalize(d.xy + 1e-4), normalize(vec2(-0.4, 0.75)))), 10.0) * smoothstep(0.3, 0.8, length(d.xy));
-        col.rgb += vec3(0.9, 0.95, 1.0) * glint * m * 0.35 * uLight;
+        col.rgb += vec3(0.9, 0.95, 1.0) * glint * m * 0.35 * uLight * (1.0 - 0.6 * uLens);
         // water whipped along the glass catches the light of the sky
         col.rgb += vec3(0.85, 0.9, 1.0) * m * sheen * (1.0 - 0.5 * edge) * 0.12 * (0.4 + 0.6 * uLight);
       }
