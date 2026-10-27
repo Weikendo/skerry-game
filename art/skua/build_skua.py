@@ -209,8 +209,6 @@ def fin(b: MB):
     prof = [(-1.8, 1.0), (-6.3, 4.7), (-7.25, 4.7), (-7.25, 1.0)]
     b.xslab(prof, 0.15, C('top'), C('topLight'))
     b.box((-0.19, 4.42, -7.32), (0.19, 4.78, -6.15), C('red'))
-    # the tail camera in a pod on top, looking forward over the Skua (the game looks out of it: 'manta-leitwerk')
-    b.box((-0.15, 4.78, -6.95), (0.15, 5.02, -6.05), {'side': C('frame'), 'front': C('glass'), 'top': C('frame')})
     # emblem on both sides (white peak, ochre hill, a band of sea), an antenna on the leading edge
     for s in (-1, 1):
         x = s * 0.155

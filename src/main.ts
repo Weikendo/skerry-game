@@ -397,22 +397,10 @@ function syncObserverCam() {
 const turretAt = (cg.updateMatrixWorld(true), cg.worldToLocal(carrierModel.turret.getWorldPosition(V(0, 0, 0))));
 cams.add({ id: TURRET_CAM, label: t('cam.shipTurret'), group: 'Träger', anchor: cg, eye: turretAt.clone().add(V(0, 7.2, 0)), look: turretAt.clone().add(V(0, 7.2, 100)),
   fov: 50, stabilised: 'yaw', tiltRange: [-0.1, 1.35], tilt0: 0.06, panRange: Infinity, maxZoom: 8 });
-// the chase camera behind and above
-cams.add({ id: 'walrus-mast', label: t('cam.otterChase'), group: 'Walrus', anchor: wg, eye: V(0, 14, -28), look: V(0, 3, 30), stabilised: 'yaw', lag: 4 });
-/**
- * The camera on top of the turret's sensor mast (art/otter/build_otter.py), in turret coordinates. It turns with the
- * turret round its ring, but its stabilised head keeps to the hull's heading and the horizon: it looks out over the
- * turret, the barrels and the cab roof ahead.
- */
-const MAST_CAMERA = new THREE.Vector3(1.05, 4.09, -0.99);
-const mastLens = new THREE.Vector3();
-cams.add({ id: 'walrus-sensormast', label: t('cam.otterMast'), group: 'Walrus', anchor: wg, eye: V(1.05, 9.64, -3.59), look: V(1.05, -7.4, 96.4), fov: 60,
-  stabilised: 'yaw', eyeAt: (a) => (a.getObjectByName('turret') ?? a).localToWorld(mastLens.copy(MAST_CAMERA)) });
+cams.add({ id: 'walrus-mast', label: t('cam.otterMast'), group: 'Walrus', anchor: wg, eye: V(0, 14, -28), look: V(0, 3, 30), stabilised: 'yaw', lag: 4 });
 // driver view just in front of the cab windows (the twin laser runs above and behind it)
 cams.add({ id: 'walrus-fahrer', label: t('cam.otterDriver'), group: 'Walrus', anchor: wg, eye: V(0, 5.55, 4.45), look: V(0, 4.3, 80), fov: 62 });
-cams.add({ id: 'manta-heck', label: t('cam.skuaChase'), group: 'Manta', anchor: mg, eye: V(0, 12, -46), look: V(0, 4, 40), stabilised: 'yawPitch', lag: 3 });
-// in the pod on top of the fin (art/skua/build_skua.py), looking forward over the Skua; it banks with it
-cams.add({ id: 'manta-leitwerk', label: t('cam.skuaTail'), group: 'Manta', anchor: mg, eye: V(0, 7.3, -5.95), look: V(0, -13.9, 94), fov: 72, roll: true });
+cams.add({ id: 'manta-heck', label: t('cam.skuaTail'), group: 'Manta', anchor: mg, eye: V(0, 12, -46), look: V(0, 4, 40), stabilised: 'yawPitch', lag: 3 });
 cams.add({ id: 'manta-lift', label: t('cam.skuaLift'), group: 'Manta', anchor: cg, eye: V(16, 15, 62), look: V(0, 3, 22), fov: 58 });
 // pilot's eye just above the front of the canopy (inside it the frame would fill the picture)
 cams.add({ id: 'manta-cockpit', label: t('cam.skuaCockpit'), group: 'Manta', anchor: mg, eye: V(0, 4.65, 4.9), look: V(0, 3.9, 100), fov: 65, roll: true });
@@ -435,18 +423,6 @@ function addIslandCam(isl: string, bd: { type: string; x: number; y: number; z: 
 bases.forEach((b, i) => {
   for (const bd of b.placed) if (bd.type === 'funkmast' || bd.type === 'kommandozentrale') addIslandCam(world.islands[i].name, bd);
 });
-/**
- * Cameras nobody could have mounted (floating beside the ship or behind a unit) are there only in an easy game; in the
- * others the player sees only through cameras that really exist, and each of these gives way to the nearest real one.
- * (The developer tools still reach all of them.)
- */
-const EASY_ONLY: Record<string, string> = { 'traeger-aussen': 'traeger-bruecke', 'walrus-mast': 'walrus-sensormast', 'manta-heck': 'manta-leitwerk', 'drohne-verfolger': 'drohne-kamera' };
-/** set with the difficulty (setDifficulty) */
-let easyCams = false;
-const camAllowed = (id: string) => easyCams || !(id in EASY_ONLY);
-/** the camera to show for `id`: itself, or the real one in its place */
-const realCam = (id: string) => camAllowed(id) ? id : EASY_ONLY[id];
-cams.allowed = (c) => camAllowed(c.id);
 const DEFAULT_CAM: Record<Vehicle, string> = { traeger: 'traeger-bruecke', walrus: 'walrus-mast', manta: 'manta-lift', drohne: 'drohne-kamera' };
 /** "from the map straight into the cockpit" */
 const COCKPIT_CAM: Record<Vehicle, string> = { traeger: 'traeger-bruecke', walrus: 'walrus-fahrer', manta: 'manta-cockpit', drohne: 'drohne-kamera' };
@@ -454,15 +430,13 @@ const COCKPIT_CAM: Record<Vehicle, string> = { traeger: 'traeger-bruecke', walru
 const mantaOutsideCam = () => (manta.state === 'deck' || manta.state === 'start' || (manta.state === 'landung' && manta.landPhase >= 1)) ? 'manta-lift' : 'manta-heck';
 let lastMantaCam = 'manta-lift';
 function autoMantaCamera() {
-  // like a director on the bridge: cut between the lift and the outside camera in the air, unless the pilot chose
-  // another (the cockpit, in an easy game the tail camera)
+  // like a director on the bridge: cut between the lift and the tail camera, unless the pilot chose the cockpit
   const want = mantaOutsideCam();
-  if (want !== lastMantaCam && (cams.current?.id === 'manta-lift' || cams.current?.id === realCam('manta-heck'))) selectCam(want);
+  if (want !== lastMantaCam && (cams.current?.id === 'manta-lift' || cams.current?.id === 'manta-heck')) selectCam(want);
   lastMantaCam = want;
 }
-/** `any`: the developer tools, which may pick a camera the difficulty leaves out */
-function selectCam(id: string, any = false) {
-  cams.select(any ? id : realCam(id));
+function selectCam(id: string) {
+  cams.select(id);
   params.kamera = cams.current?.label ?? '';
 }
 selectCam(DEFAULT_CAM.traeger);
@@ -689,7 +663,7 @@ fTime.add(params, 'wetter', Object.keys(WEATHER_LABELS)).name(t('gui.weather')).
 gui.add(params, 'einheit', Object.values(VEHICLE_NAMES)).name(t('gui.unit')).listen()
   .onChange((v: string) => setVehicle(VEHICLES.find(k => VEHICLE_NAMES[k] === v)!));
 gui.add(params, 'kamera', cams.cams.filter(c => c.group !== 'Insel').map(c => c.label)).name(t('gui.camera')).listen()
-  .onChange((label: string) => { const c = cams.cams.find(x => x.label === label); if (c) { setDevCamera(false); selectCam(c.id, true); } });
+  .onChange((label: string) => { const c = cams.cams.find(x => x.label === label); if (c) { setDevCamera(false); selectCam(c.id); } });
 const fDev = gui.addFolder(t('gui.developer'));
 fDev.add(params, 'entwickler').name(t('gui.freeCam')).listen().onChange(setDevCamera);
 fDev.add({ insel: islandOverview }, 'insel').name(t('gui.islandOverview'));
@@ -2247,7 +2221,7 @@ const wall = new MonitorWall(deck.slots, {
     if (g === 'ship') {
       // (beside the radar the arrows step the big picture's camera instead)
       if (monitorState('ship').radar) { nextCamera(id === 'prev' ? -1 : 1); return; }
-      const list = cams.cams.filter(c => c.group === 'Träger' && cams.allowed(c)), i = list.findIndex(c => c.id === monPick.ship);
+      const list = cams.cams.filter(c => c.group === 'Träger'), i = list.findIndex(c => c.id === monPick.ship);
       monPick.ship = list[(i + (id === 'prev' ? -1 : 1) + list.length) % list.length].id;
     } else if (g === 'otter') monPick.otter = Number(id);
     else if (id === 'drone') monPick.drone = true;
@@ -2279,7 +2253,7 @@ function monUnit(g: MonitorGroup): UnitId {
   return monPick.drone ? 'drohne' : unitIdOf('manta', monIndex('skua'));
 }
 function monCamId(g: MonitorGroup): string {
-  return realCam(g === 'ship' ? monPick.ship : g === 'otter' ? MON_CAM.walrus : monPick.drone ? MON_CAM.drohne : MON_CAM.manta);
+  return g === 'ship' ? monPick.ship : g === 'otter' ? MON_CAM.walrus : monPick.drone ? MON_CAM.drohne : MON_CAM.manta;
 }
 /** a camera's name, with the unit's own name for an Otter's or Skua's ("Otter 2 – Mast") */
 const camLabel = (id: string, name?: string) => (cams.cams.find(c => c.id === id)?.label ?? '').replace(TYPE_PREFIX, name ?? '$1');
@@ -2776,10 +2750,6 @@ function setDifficulty(d: Difficulty, fresh: boolean) {
   game.difficulty = d;
   omega.setDifficulty(d, fresh);
   combat.foeDamage = TUNING[d].damage;
-  // only an easy game has the cameras nobody could have mounted: the big picture and the ship's screen leave them
-  easyCams = d === 'leicht';
-  monPick.ship = realCam(monPick.ship);
-  if (cams.current && !params.entwickler && !camAllowed(cams.current.id)) selectCam(cams.current.id);
 }
 
 /** a carrier's hull gave out: it burns and goes down; the enemy's vehicles out lose their ship */
