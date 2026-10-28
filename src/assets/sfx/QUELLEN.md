@@ -4,7 +4,7 @@ Alle Dateien sind gemeinfrei (CC0 1.0, https://creativecommons.org/publicdomain/
 
 ## BigSoundBank (Joseph Sardin, https://bigsoundbank.com)
 
-Seiten ausgewiesen als „CC0 (public domain): Free and royalty-free“. Unverändert übernommen, nur umbenannt; die Feuerschleife ist geschnitten und neu kodiert.
+Seiten ausgewiesen als „CC0 (public domain): Free and royalty-free“. Unverändert übernommen, nur umbenannt; die Feuerschleife und die zwei Regenschleifen sind geschnitten und neu kodiert.
 
 | Datei | Original | Nr. |
 |---|---|---|
@@ -19,6 +19,8 @@ Seiten ausgewiesen als „CC0 (public domain): Free and royalty-free“. Unverä
 | `wasser-klein.ogg` | Splash small #1 | 1529 |
 | `rakete-start.ogg` | Whoosh #3 | 1795 |
 | `feuer-schleife.ogg` | Big branching fire #1, Sekunde 10–25 als nahtlose Schleife (Opus) | 0987 |
+| `scheibe-stark.ogg` | Rain on car windshield, Sekunde 1–16 als nahtlose Schleife, unter 90 Hz abgesenkt, +4 dB (Opus; heruntergeladen am 28.10.2026) | 1295 |
+| `scheibe-leicht.ogg` | Storm and rain on car windshield, Sekunde 27–48 (nach dem Donner) als nahtlose Schleife, unter 90 Hz abgesenkt, +11 dB (Opus; heruntergeladen am 28.10.2026) | 1296 |
 
 ## Kenney (https://kenney.nl), „Impact Sounds“ 1.0
 

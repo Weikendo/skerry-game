@@ -97,6 +97,8 @@ const DEEP = new THREE.Color(PAL.wasserTief);
 const FOG_GREY = new THREE.Color('#b9c0c6');
 // the far sea by day: a light turquoise under the haze
 const SEA_HAZE = new THREE.Color('#8ccfd6');
+/** the open sea far out in foul weather: dark slate (the reflected sky alone made it light, the clear sea's blue made it turquoise) */
+const SEA_FAR_STORM = new THREE.Color('#45505a');
 // the horizon away from the sun by day: cool and light (look analysis, measure 8)
 const HORIZON_COOL = new THREE.Color('#bcdde6');
 
@@ -142,6 +144,10 @@ export class Environment {
   readonly cloudColor = new THREE.Color();
   /** colour of the open sea towards the horizon (sky dome below the horizon + ocean fog) */
   readonly seaFar = new THREE.Color();
+  /** the open sea's own colour far out, and its haze under a clear sky by day: the sea's style sets them (Ocean.update;
+   *  turquoise for the mosaic and the lines, steel blue for the Atlantic's steps) */
+  readonly seaDeep = DEEP.clone();
+  readonly seaHaze = SEA_HAZE.clone();
   /** 0 clear .. 1 dense fog: everything dissolves into the fog colour */
   fogAmount = 0;
 
@@ -237,12 +243,14 @@ export class Environment {
     this.horizonCool.copy(this.horizon).lerp(coolTone, Math.min(1, grey * grey + twilight * 0.75) * (1 - overcast) * 0.85);
     this.cloudColor.copy(CLOUD).lerp(CLOUD_STORM, w.dark).lerp(this.horizon, 0.15);
 
-    // far sea: by day in clear weather a light turquoise under the haze; at night and in storms the reflected
-    // horizon, a bit darker and bluer than the sky
+    // far sea: by day in clear weather light under the haze (the sea's own haze); at night the reflected horizon, a
+    // bit darker and bluer than the sky; in foul weather a dark slate under the lighter horizon (it was the clear
+    // sea's turquoise there too: a bright turquoise band under a grey or brownish rain sky)
     this.fogAmount = 1 - smoothstep(1500, 7000, w.fogFar);
+    const own = this.seaDeep.clone().lerp(SEA_FAR_STORM, w.sea);
     this.seaFar.copy(this.horizon).multiplyScalar(0.85)
-      .lerp(DEEP.clone().multiplyScalar(lerp(0.12, 0.95, grey)), 0.55)
-      .lerp(this.horizon.clone().lerp(SEA_HAZE, 0.75), grey * (1 - w.sea))
+      .lerp(own.multiplyScalar(lerp(0.12, 0.95, grey)), 0.55)
+      .lerp(this.horizon.clone().lerp(this.seaHaze, 0.75), grey * (1 - w.sea))
       .lerp(this.horizon, this.fogAmount);
   }
 

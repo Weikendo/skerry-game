@@ -52,7 +52,8 @@ import { PointerControl } from './game/pointer';
 import { Combat, shotReach, shotSpeed, type Target } from './game/combat';
 import { MapView, OWNER_NAMES, type EnemyView, type IslandAlarm, type MapActions, type MapCommand } from './ui/map';
 import { CameraSystem, type CamGroup } from './game/cameras';
-import { SoundEngine, type SoundLevels } from './audio/sound';
+import { SoundEngine, type SoundLevels, type SoundScene } from './audio/sound';
+import { Finale } from './ui/finale';
 import { ShipVoice, type VoiceLine } from './audio/voice';
 import { TitleMusic } from './audio/music';
 import { bearing, helpLine, indexOf, kindOf, unitIdOf, unitName, weatherIcon, windShort, type Fleet, type PadHelp, type UnitId, type Units, type Vehicle } from './ui/hud';
@@ -137,6 +138,9 @@ const VOYAGE = { speed: 12, after: 45, land: 1000, fight: 6000, calmAfterFight: 
 /** the title's music: the storm's sea, wind and rain give way to it, down to a sixth (a storm is about 6 dB louder than the music, its quiet opening 13 dB) */
 const TITLE_MUSIC = { duck: 0.83 };
 const voyage = { on: false, calm: 0, check: 0, lastFight: -Infinity, rested: -Infinity };
+/** the victory's film over the sinking Nuckelavee; the music sets in with its big word */
+const finale = new Finale();
+finale.onWord = (won) => { if (won && !music.busy) void music.play(); };
 effects.listener = sound;
 // the glowing shots fade with the fog, seen from the camera in use
 combat.viewer = { camera, fog: null };
@@ -232,6 +236,8 @@ input.onConnect = (name, standard) => notify(standard ? t('pad.connected', { nam
 const pointer = new PointerControl(renderer.domElement, () => started && !menu.open && !map.open && !supply.open);
 /** keyboard only and without presses: sub-steps while a window keeps the pad out of the game */
 const keysHeldOnly: InputLike = { down: (...c) => input.keysOnly.down(...c), hit: () => false, axis: (n, p) => input.keysOnly.axis(n, p) };
+/** nothing pressed (while the victory's film runs) */
+const NO_INPUT: InputLike = { down: () => false, hit: () => false, axis: () => 0 };
 // start off the south coast of the home island (Vulcan), half speed eastwards
 const home = world.islands[0];
 const carrier = new CarrierController(carrierModel, world, env, {
@@ -581,7 +587,7 @@ function rainOnGlass(dt: number): boolean {
   u.uFlow.value = wet.flow;
   u.uBlow.value = wet.blow;
   u.uCentre.value.set(wet.cx, wet.cy);
-  u.uLens.value = GLASS_CAMS.has(id) ? 0 : 1;
+  u.uLens.value = GLASS_CAMS.has(id) && !finale.on ? 0 : 1;
   return true;
 }
 /** lights: dull by day, glowing at night and in bad weather */
@@ -2088,40 +2094,60 @@ function padRumble(dt: number) {
   if (warn && feel.warn <= 0) { input.rumble(0, 0.3, 120); feel.warn = 0.8; }
 }
 
+/**
+ * Each view has its own soundscape (audio/sound.ts): the map and the supply screen are the operations room deep in the
+ * ship, the bridge has its windows, the ship's other cameras are out on deck, the spotter pod hangs high in the wind;
+ * the Skua's cockpit and the Otter's cab hear the outside through their glass, every other camera as it is
+ */
+function soundScene(): SoundScene {
+  if (!started || params.entwickler || finale.on) return 'aussen';
+  if (map.open || supply.open) return 'karte';
+  const c = cams.current;
+  if (c?.id === 'traeger-bruecke') return 'bruecke';
+  if (c?.id === OBS_CAM) return 'sonde';
+  if (c?.id === 'manta-cockpit' || c?.id === 'walrus-fahrer') return 'kabine';
+  // the ship's other cameras, and the Skua's lift and the drone's pad on its deck
+  return c?.anchor === cg ? 'deck' : 'aussen';
+}
+/** the ear in the operations room: under the map the player sits in the ship, not at the covered picture's camera */
+const shipEar = new THREE.PerspectiveCamera();
+
 function updateSound(dt: number) {
-  // through the spotter pod the sound comes with its picture: a Hammerhead's blast at the strike, not 3 s after
-  sound.listener(camera, !params.entwickler && cams.current?.id === OBS_CAM);
-  const toCarrier = camera.position.distanceTo(carrier.pos);
-  const onCarrier = !params.entwickler && cams.current?.group === 'Träger';
-  // in the Skua's cockpit or the Otter's cab the outside comes muffled through the glass, and its own engine is loud
-  const cabId = started && !params.entwickler ? cams.current?.id : undefined;
+  const scene = soundScene();
+  sound.scene(scene);
+  const ear = scene === 'karte' && cams.placeRigid('traeger-bruecke', shipEar) ? shipEar : camera;
+  // through the spotter pod the sound comes with its picture: a Hammerhead's blast at the strike, not 3 s after (and
+  // so in the victory's film, whose cameras are hundreds of metres off)
+  sound.listener(ear, scene === 'sonde' || finale.on);
+  const toCarrier = ear.position.distanceTo(carrier.pos);
+  // in the Skua's cockpit or the Otter's cab its own engine is loud
+  const cabId = scene === 'kabine' ? cams.current?.id : undefined;
   const cab = cabId === 'manta-cockpit' ? 'manta' : cabId === 'walrus-fahrer' ? 'walrus' : null;
-  sound.cabin(cab !== null);
   sound.enginesUpdate({
     cab,
     carrierSpeed: Math.min(1, Math.abs(carrier.speed) / 20) + Math.max(0, Math.abs(carrier.speed) - 20) / 40,
-    carrierNear: onCarrier ? 1 : THREE.MathUtils.clamp(1 - (toCarrier - 150) / 1400, 0, 1),
+    carrierNear: THREE.MathUtils.clamp(1 - (toCarrier - 150) / 1400, 0, 1),
     walrus: { on: walrus.state !== 'dock' && walrus.state !== 'zerstoert', rpm: Math.min(1, Math.abs(walrus.speed) / 12), pos: walrus.pos },
     manta: { on: manta.state === 'start' || manta.state === 'flug' || manta.state === 'landung' || manta.state === 'padland' || manta.state === 'padstart', thrust: manta.throttle, pos: manta.pos },
     drohne: { on: drone.flying, rpm: Math.min(1, Math.hypot(drone.vel.x, drone.vel.z) / 24 + Math.max(0, drone.vel.y) / 7), pos: drone.pos },
   });
-  const seaLevel = Math.max(0, world.heightAt(camera.position.x, camera.position.z));
-  sound.ambience(dt, env.w.waves, env.w.wind, env.w.rain, camera.position.y - seaLevel, env.w.dark);
+  const seaLevel = Math.max(0, world.heightAt(ear.position.x, ear.position.z));
+  sound.ambience(dt, env.w.waves, env.w.wind, env.w.rain, ear.position.y - seaLevel, env.w.dark);
   // bangs echo off the islands near the camera; the nearest fire crackles
-  sound.space(1 - THREE.MathUtils.clamp(world.nearest(camera.position.x, camera.position.z).distance / 1500, 0, 1));
-  const burning = effects.nearestFire(camera.position);
+  sound.space(1 - THREE.MathUtils.clamp(world.nearest(ear.position.x, ear.position.z).distance / 1500, 0, 1));
+  const burning = effects.nearestFire(ear.position);
   sound.fireAt(burning?.pos ?? null, burning?.size ?? 0);
   // the carrier defences: the turret's servos through its camera, the nearest defence drone's propeller, the
   // nearest Hammerhead's motor (higher while it comes closer)
   sound.servo(!params.entwickler && active === 'traeger' && cams.current?.id === TURRET_CAM ? Math.min(1, defence.slew / TURRET.yawRate) : 0);
   let hum: THREE.Vector3 | null = null, humD = 250;
   for (const d of [...shields.drones, ...foeShields.drones]) {
-    const dd = d.alive ? d.pos.distanceTo(camera.position) : Infinity;
+    const dd = d.alive ? d.pos.distanceTo(ear.position) : Infinity;
     if (dd < humD) { humD = dd; hum = d.pos; }
   }
   sound.shieldHum(hum);
-  const hh = combat.nearestMissile(camera.position, 2500, 'hammerhead');
-  sound.missileRoar(hh?.pos ?? null, hh ? hh.vel.dot(aheadV.subVectors(camera.position, hh.pos).normalize()) : 0);
+  const hh = combat.nearestMissile(ear.position, 2500, 'hammerhead');
+  sound.missileRoar(hh?.pos ?? null, hh ? hh.vel.dot(aheadV.subVectors(ear.position, hh.pos).normalize()) : 0);
   // an enemy Skua has locked on to the unit in hand, or its missiles fly at it: warning beeps
   const hand = active === 'walrus' ? walrus : active === 'manta' ? manta : active === 'drohne' ? drone : carrier;
   const inbound = combat.missilesAt(hand);
@@ -2411,7 +2437,7 @@ function renderMonitors() {
     // the sky dome, the sea and the islands' near or far meshes follow the camera they are seen from;
     // the light halos are sized for the big picture: scale them to this screen's height and field of view
     sky.update(env, monCam);
-    ocean.update(env, monCam);
+    ocean.update(env, monCam, m.h * pr);
     world.viewFrom(monCam.position.x, monCam.position.z, worldFar);
     GLOW_VIEW.value = (m.h / H) * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.tan(THREE.MathUtils.degToRad(monCam.fov) / 2);
     // (in the screen's own place: on the map that part of the canvas is hidden anyway, in the 3D view the screen covers it)
@@ -2429,7 +2455,7 @@ function renderMonitors() {
   monNext = (monNext + per) % monLive.length;
   GLOW_VIEW.value = 1;
   sky.update(env, camera);
-  ocean.update(env, camera);
+  ocean.update(env, camera, renderer.getDrawingBufferSize(bufferSize).y);
   world.viewFrom(camera.position.x, camera.position.z, worldFar);
 }
 let surveyTimer = 0;
@@ -2506,8 +2532,8 @@ function simulate(dt: number): number {
   // game time: 1 game minute per real second by default (a day lasts 24 minutes)
   env.timeSpeed = params.zeitLaeuft ? params.tempo / 60 : 0;
   updateAim();
-  // no shooting with the map or a window open
-  const armed = !map.open && !supply.open;
+  // no shooting with the map or a window open, nor while the victory's film runs
+  const armed = !map.open && !supply.open && !finale.on;
   const trigger = armed && input.down(...KEYS.fire);
   const fired = armed && input.hit(...KEYS.fire);
   const missile = armed && input.hit(...KEYS.missile);
@@ -2524,7 +2550,7 @@ function simulate(dt: number): number {
   combat.wind.set(env.windX, 0, env.windZ);
   for (let i = 0; i < steps; i++) {
     // with a window open (the stores) only the keyboard drives
-    const inp: InputLike = supply.open ? (i === 0 ? input.keysOnly : keysHeldOnly) : i === 0 ? input : input.heldOnly;
+    const inp: InputLike = finale.on ? NO_INPUT : supply.open ? (i === 0 ? input.keysOnly : keysHeldOnly) : i === 0 ? input : input.heldOnly;
     env.update(h);
     carrier.update(h, active === 'traeger' ? inp : null);
     enemyShip.update(h, null);
@@ -2718,7 +2744,7 @@ function present(dt: number, simDt: number) {
   else cams.update(dt);
   // the console's monitors: where their live screens are this frame
   followActive();
-  if (started && !menu.open) {
+  if (started && !menu.open && !finale.on) {
     const sel = kindOf(map.selected), selG: MonitorGroup = sel === 'traeger' ? 'ship' : sel === 'walrus' ? 'otter' : 'skua';
     monLive = wall.update(monitorState, monitorButtons, map.open && map.selected !== 'traeger' ? selG : null,
       (g) => fleetStatus.lamp(monUnit(g), performance.now() / 1000, false).cls);
@@ -2738,6 +2764,7 @@ function present(dt: number, simDt: number) {
     const off = R * 0.34 * Math.tan(THREE.MathUtils.degToRad(27.5)) * camera.aspect;
     camera.lookAt(cx + (fz / d) * off, 14, cz - (fx / d) * off);
   }
+  finale.update(dt, camera);
   updateDroneCamera(dt);
   updateLighting();
   sky.update(env, camera);
@@ -2750,7 +2777,7 @@ function present(dt: number, simDt: number) {
   // bases show near the camera and near every unit on the monitor wall
   const viewers = [camera.position, ...monLive.map(m => monPos(m.g))];
   for (const b of bases) b.group.visible = viewers.some(p => b.island.distanceTo(p.x, p.z) < Math.min(7000, farLimit));
-  ocean.update(env, camera);
+  ocean.update(env, camera, renderer.getDrawingBufferSize(bufferSize).y);
   clouds.update(env, simDt, focus);
   rain.update(env, camera, renderer.getDrawingBufferSize(bufferSize), renderer.getPixelRatio());
   nightLights(carrierModel.lights, carrierModel.glow);
@@ -2808,8 +2835,11 @@ function step(now: number, fixedDt?: number) {
     else if (!stillDrawn) { env.update(0); present(0, 0); stillDrawn = true; }
     return;
   }
-  pointerFrame(dt);
-  handleKeys(dt);
+  // (back in the game after the end screen: its own cameras again)
+  finale.release();
+  // while the victory's film runs the player only watches: a click, a key or a pad button goes on
+  if (finale.on) { if (input.hit('Pad.A', 'Pad.B', 'Pad.X', 'Pad.Y', 'Pad.Start')) finale.next(); }
+  else { pointerFrame(dt); handleKeys(dt); }
   if (menu.open) { input.endFrame(); return; }
   const simDt = simulate(dt);
   input.endFrame();
@@ -2862,6 +2892,30 @@ function shipLost(ship: CarrierController) {
   effects.explosion(p, 3, ship === carrier ? PAL.ocker : PAL.feind);
   if (ship === enemyShip) { notify(t('end.foeSinking', { ship: ENEMY_SHIP_NAME }), 'good'); voice.say('traeger-sinkt'); }
   else { notify(t('end.shipSinking', { ship: SHIP_NAME }), 'bad'); voice.say('schiff-sinkt'); }
+  // a carrier is hit for good: the victory (the enemy's) or the defeat (the player's own), as a film of it going
+  // down, then the end screen. (The player's going down takes over from a victory's film still running, and comes
+  // as a film after a victory played on too)
+  if (!started || game.over === 'niederlage') return;
+  if (ship === enemyShip && !game.omegaSunk && !goingDown.has(carrier)) startFinale(enemyShip, true);
+  if (ship === carrier) startFinale(carrier, false);
+}
+/**
+ * The end's film (src/ui/finale.ts): cameras round the sinking carrier, the console out of the way, a big "Victory"
+ * or "Defeat" after a few seconds; the end screen follows on a click
+ */
+function startFinale(ship: CarrierController, won: boolean) {
+  if (won) game.omegaSunk = true;
+  voyage.on = false;
+  // a defeat is silent (the voyage's music fades out)
+  if (!won) music.stop(1.5);
+  if (map.open) map.toggle();
+  if (supply.open) supply.toggle();
+  pointer.release();
+  finale.start({
+    localToWorld: (x, z) => ship.localToWorld(x, z),
+    get deck() { return ship.model.group.position.y; },
+    ground: (x, z) => world.heightAt(x, z),
+  }, won, () => endGame(won, won ? 'omega' : 'traeger'));
 }
 let endCheck = 0;
 /** each frame: explosions and fires on a sinking ship; once a second whether the game is won or lost */
@@ -2891,7 +2945,8 @@ function updateEnd(dt: number) {
   if (endCheck > 0 || game.over === 'niederlage') return;
   endCheck = 1;
   const ds = goingDown.get(carrier), de = goingDown.get(enemyShip);
-  if (ds && carrier.sinking > 8) return endGame(false, 'traeger');
+  // (the defeat's film ends the game itself, on a click)
+  if (ds && carrier.sinking > 8 && !finale.on) return endGame(false, 'traeger');
   if (bases.every(b => b.team === 'feind')) return endGame(false, 'inseln');
   if (game.over) return;
   if (!game.omegaSunk && de && enemyShip.sinking > 10) { game.omegaSunk = true; return endGame(true, 'omega'); }
@@ -2899,11 +2954,13 @@ function updateEnd(dt: number) {
 }
 /** the game is won or lost: the end screen with the tally (after sinking the enemy's ship the player may go on) */
 function endGame(won: boolean, reason: 'omega' | 'inseln' | 'traeger') {
+  // (a defeat while the victory's film still ran ends it)
+  finale.stop();
   game.over = won ? 'sieg' : 'niederlage';
   if (won) autosave();
-  // the music sounds for a victory (the voyage's gives way to it), a defeat is silent
+  // the music sounds for a victory (the voyage's gives way to it; the film started it already), a defeat is silent
   voyage.on = false;
-  if (won) void music.play();
+  if (won && !music.busy) void music.play();
   else music.stop(1.5);
   if (map.open) map.toggle();
   pointer.release();
@@ -3024,7 +3081,7 @@ function startGame(fresh: boolean, difficulty: Difficulty = 'normal', withTutori
     if (withTutorial) tutorial.start(); else tutorial.stop();
   }
   music.stop();
-  // a new game always starts in heavy rain, as the North Sea greets you (the title's storm eases into it at once; a
+  // a new game always starts in heavy rain, as the North Atlantic greets you (the title's storm eases into it at once; a
   // loaded game brings its own weather)
   if (fresh) { env.setWeather('regen', true, 6, undefined, 0.85); params.wetter = WEATHER_NAME.regen; weather.restart(); }
   // a new game starts late in the morning, so there is a day ahead before it gets dark (the title stays at 17:00)

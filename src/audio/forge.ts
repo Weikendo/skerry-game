@@ -7,7 +7,11 @@
  * engine varies them further in pitch.
  */
 
-export type ForgeKind = 'duesen' | 'laser' | 'laser-schwer' | 'turm' | 'turm-kurz' | 'rakete' | 'treffer' | 'truemmer' | 'ui-treffer' | 'ui-abschuss';
+export type ForgeKind = 'duesen' | 'laser' | 'laser-schwer' | 'turm' | 'turm-kurz' | 'rakete' | 'treffer' | 'truemmer' | 'ui-treffer' | 'ui-abschuss'
+  | LoopKind;
+/** the loops of the soundscapes: the sea washing past, wind in gusts, the wind whistling round the bridge (the rain on
+ *  its windows is recorded, sound.ts) */
+export type LoopKind = 'seegang' | 'boeen' | 'pfeifen';
 
 /** the modes of a struck plate, as multiples of its lowest */
 const PLATE = [1, 1.59, 2.14, 2.3, 2.65, 2.92, 3.5, 4.15];
@@ -72,12 +76,16 @@ class Sketch {
     const attack = o.attack ?? 0.001, tau = o.tau ?? len / 4;
     let ic1 = 0, ic2 = 0, brown = 0, wander = 1, goal = 1;
     const every = o.roughRate ? Math.max(1, Math.round(this.sr / o.roughRate)) : 96, ease = o.roughRate ? Math.min(1, 2 / every) : 0.02;
+    let a1 = 0, a2 = 0, a3 = 0;
     for (let i = 0; i < n; i++) {
       const t = i / this.sr;
       let v0 = this.rand() * 2 - 1;
       if (o.brown) { brown = (brown + 0.02 * v0) / 1.02; v0 = brown * 3.5; }
-      const fc = Math.min(o.f0 * Math.pow(o.f1 / o.f0, t / len), this.sr * 0.45);
-      const g = Math.tan(Math.PI * fc / this.sr), a1 = 1 / (1 + g * (g + k)), a2 = g * a1, a3 = g * a2;
+      // the filter follows its sweep every 16 samples (slow against that, and the tangent is the costly part)
+      if ((i & 15) === 0) {
+        const g = Math.tan(Math.PI * Math.min(o.f0 * Math.pow(o.f1 / o.f0, t / len), this.sr * 0.45) / this.sr);
+        a1 = 1 / (1 + g * (g + k)); a2 = g * a1; a3 = g * a2;
+      }
       const v3 = v0 - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
       ic1 = 2 * v1 - ic1; ic2 = 2 * v2 - ic2;
       const s = o.mode === 'low' ? v2 : o.mode === 'band' ? k * v1 : v0 - k * v1 - v2;
@@ -132,6 +140,38 @@ class Sketch {
       }
     }
     this.add(at, amp, y);
+  }
+
+  /**
+   * Noise rung through a narrow band whose pitch and level wander (`rate` new goals a second, the pitch by up to
+   * `spread` octaves round `f`, the level now and then down to nothing): wind whistling through a gap
+   */
+  whistle(len: number, f: number, q: number, amp: number, rate: number, spread: number) {
+    const n = Math.ceil(len * this.sr), y = new Float32Array(n), k = 1 / q, every = Math.max(1, Math.round(this.sr / rate)), ease = 3 / every;
+    let ic1 = 0, ic2 = 0, pitch = 0, pGoal = 0, level = 0, lGoal = 0, a1 = 0, a2 = 0, a3 = 0;
+    for (let i = 0; i < n; i++) {
+      if (i % every === 0) { pGoal = this.rand() * 2 - 1; lGoal = Math.pow(this.rand(), 2); }
+      pitch += (pGoal - pitch) * ease; level += (lGoal - level) * ease;
+      if ((i & 15) === 0) {
+        const g = Math.tan(Math.PI * Math.min(f * Math.pow(2, spread * pitch), this.sr * 0.45) / this.sr);
+        a1 = 1 / (1 + g * (g + k)); a2 = g * a1; a3 = g * a2;
+      }
+      const v3 = this.rand() * 2 - 1 - ic2, v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
+      ic1 = 2 * v1 - ic1; ic2 = 2 * v2 - ic2;
+      y[i] = k * v1 * level;
+    }
+    this.add(0, amp, y);
+  }
+
+  /** everything so far rises and falls together in gusts, between 1 − `depth` and 1 + `depth` (`rate` new goals a second) */
+  gusts(rate: number, depth: number) {
+    const x = this.x, every = Math.max(1, Math.round(this.sr / rate)), ease = 2 / every;
+    let level = 1, goal = 1;
+    for (let i = 0; i < x.length; i++) {
+      if (i % every === 0) goal = 1 - depth + 2 * depth * this.rand();
+      level += (goal - level) * ease;
+      x[i] *= level;
+    }
   }
 
   /** soft clipping over everything so far */
@@ -205,8 +245,9 @@ function discharge(s: Sketch, at: number, top: number, bottom: number, len: numb
   s.hiss(at + 0.008, len * 0.85, amp, { mode: 'band', f0: top * 1.5, f1: bottom * 1.5, q: 10, attack: 0.002 });
 }
 
-/** `loop`: a seamless loop of `seconds` (worked out a little longer, the tail faded into the start) */
-interface Recipe { seconds: number; variants: number; loop?: boolean; make(s: Sketch): void }
+/** `loop`: a seamless loop of `seconds` (worked out a little longer, the tail faded into the start); `soft`: nothing in
+ *  it above a few kHz, so it is worked out at half the sample rate (half the work) */
+interface Recipe { seconds: number; variants: number; loop?: boolean; soft?: boolean; make(s: Sketch): void }
 
 const LOOP_FADE = 0.4;
 
@@ -222,6 +263,34 @@ const RECIPES: Record<ForgeKind, Recipe> = {
     s.hiss(0, len, 0.8, { mode: 'band', f0: 520, f1: 520, q: 1.4, tau: steady, rough: 0.5, roughRate: 25 });
     s.hiss(0, len, 0.9, { mode: 'low', f0: 260, f1: 260, brown: true, tau: steady, rough: 0.3, roughRate: 12 });
     s.hiss(0, len, 0.22, { mode: 'high', f0: 5000, f1: 5000, tau: steady, rough: 0.6, roughRate: 60 });
+  } },
+  /**
+   * The sea round the ship, as a loop (before, it was only brown noise under an even, slow swell): a hissing bed, and
+   * wave after wave washing past at uneven times, each at its own pitch, swelling and running out
+   */
+  seegang: { seconds: 16, variants: 1, loop: true, soft: true, make(s) {
+    const len = 16 + LOOP_FADE;
+    s.hiss(0, len, 0.3, { mode: 'band', f0: 900, f1: 900, q: 0.5, tau: 1e9, rough: 0.3, roughRate: 1.5 });
+    for (let t = s.between(0, 0.8); t < len; t += s.between(1.2, 2.8)) {
+      const dur = s.between(1.8, 4), f = s.between(400, 1300);
+      s.hiss(t, dur, s.between(0.45, 1), { mode: 'band', f0: f * 1.5, f1: f * 0.55, q: 0.55, attack: dur * s.between(0.25, 0.45), tau: dur * 0.22, rough: 0.35, roughRate: 40 });
+    }
+  } },
+  /** wind in gusts, as a loop: a broad roar, its bands and a buffeting rumble under it rising and falling together */
+  boeen: { seconds: 12, variants: 1, loop: true, soft: true, make(s) {
+    const len = 12 + LOOP_FADE, steady = 1e9;
+    s.hiss(0, len, 1, { mode: 'low', f0: 1100, f1: 1100, q: 0.6, tau: steady, rough: 0.3, roughRate: 2 });
+    s.hiss(0, len, 0.5, { mode: 'band', f0: 380, f1: 380, q: 1.4, tau: steady, rough: 0.5, roughRate: 1.4 });
+    s.hiss(0, len, 0.22, { mode: 'high', f0: 3000, f1: 3000, tau: steady, rough: 0.6, roughRate: 0.9 });
+    s.hiss(0, len, 0.9, { mode: 'low', f0: 140, f1: 140, brown: true, tau: steady, rough: 0.7, roughRate: 6 });
+    s.gusts(0.5, 0.65);
+  } },
+  /** the wind whistling round the bridge's windows in a storm, as a loop: narrow tones that wander, come and go */
+  pfeifen: { seconds: 10, variants: 1, loop: true, soft: true, make(s) {
+    const len = 10 + LOOP_FADE;
+    s.whistle(len, 1250, 40, 1, 0.9, 0.35);
+    s.whistle(len, 1900, 50, 0.6, 1.3, 0.3);
+    s.whistle(len, 640, 18, 0.5, 0.6, 0.4);
   } },
   /** the Quasar of a Skua and the Otters' laser */
   laser: { seconds: 1, variants: 3, make(s) {
@@ -318,10 +387,11 @@ const RECIPES: Record<ForgeKind, Recipe> = {
   } },
 };
 
-/** each kind, how many variants and how long it lasts (s) */
-export const FORGE_KINDS = (Object.keys(RECIPES) as ForgeKind[]).map(kind => ({ kind, variants: RECIPES[kind].variants, seconds: RECIPES[kind].seconds }));
+/** each kind, how many variants, how long it lasts (s), whether it is a loop, and the share of the sample rate it is worked out at */
+export const FORGE_KINDS = (Object.keys(RECIPES) as ForgeKind[]).map(kind => ({ kind, variants: RECIPES[kind].variants, seconds: RECIPES[kind].seconds,
+  loop: !!RECIPES[kind].loop, rate: RECIPES[kind].soft ? 0.5 : 1 }));
 
-/** the samples of one variant at sample rate `sr` (a few ms of work each) */
+/** the samples of one variant at sample rate `sr` (a few ms of work each; give a soft one its share of the rate, FORGE_KINDS) */
 export function forge(kind: ForgeKind, variant: number, sr: number): Float32Array {
   let seed = 7 + variant * 7919;
   for (const c of kind) seed = Math.imul(seed ^ c.charCodeAt(0), 2654435761);

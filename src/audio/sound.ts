@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FORGE_KINDS, forge, type ForgeKind } from './forge';
+import { FORGE_KINDS, forge, type ForgeKind, type LoopKind } from './forge';
 
 /** Mixer channels, 0..1 (music: the title music, see music.ts; voice: the ship computer, see voice.ts) */
 export interface SoundLevels { master: number; effects: number; ambience: number; engines: number; music: number; voice: number }
@@ -9,8 +9,10 @@ interface Engine { gain: GainNode; panner: PannerNode | null; nodes: AudioNode[]
 const MAX_VOICES = 40;
 /** the ship computer's voice over the mix (its recordings are levelled to −20 LUFS) */
 const SPEECH_GAIN = 1.25;
-/** while it speaks, effects and engines step back to this share */
+/** while it speaks, effects and engines step back to this share, sea and weather to the other (out in a storm the
+ *  voice was hardly above the wind) */
 const SPEECH_DUCK = 0.55;
+const SPEECH_DUCK_AMB = 0.6;
 
 /** the recorded sounds (CC0, see src/assets/sfx/QUELLEN.md), grouped by name without the number: 'explosion-nah' … */
 const SAMPLE_URLS = [
@@ -26,11 +28,16 @@ const SAMPLE_URLS = [
   new URL('../assets/sfx/rakete-start.ogg', import.meta.url).href,
   new URL('../assets/sfx/schuss-1.ogg', import.meta.url).href,
   new URL('../assets/sfx/schuss-2.ogg', import.meta.url).href,
+  new URL('../assets/sfx/scheibe-leicht.ogg', import.meta.url).href,
+  new URL('../assets/sfx/scheibe-stark.ogg', import.meta.url).href,
   new URL('../assets/sfx/wasser-gross.ogg', import.meta.url).href,
   new URL('../assets/sfx/wasser-klein.ogg', import.meta.url).href,
 ];
 const GROUPS = ['explosion-nah', 'explosion-fern', 'nachrollen', 'schuss', 'wasser-gross', 'wasser-klein', 'rakete-start',
-  'boden', 'feuer-schleife'] as const;
+  'boden', 'feuer-schleife', 'scheibe-leicht', 'scheibe-stark'] as const;
+/** the soundscapes' loops: worked out in code (forge.ts), or recorded (rain on the bridge's windows: worked out, its
+ *  drops rang like a soft xylophone) */
+type BedKind = LoopKind | 'scheibe-leicht' | 'scheibe-stark';
 /** a group of recordings, or of the sounds worked out in code when the sound starts (forge.ts) */
 type SampleGroup = typeof GROUPS[number] | ForgeKind;
 /** how long each worked-out sound lasts (s) */
@@ -42,24 +49,80 @@ const AMBIENCE_FADE_IN = 6;
 /** how much louder a unit's own engine is from inside its cab (about +5 dB) */
 const CAB_ENGINE = 1.8;
 
+/** where the player listens from: each view has its own soundscape, and it fades over when the view changes */
+export type SoundScene = 'karte' | 'bruecke' | 'deck' | 'sonde' | 'kabine' | 'aussen';
+
+interface SceneMix {
+  /** sea, wind and rain from outside, through the hull or the glass: low-passed (Hz) and quieter */
+  muffle: number; through: number;
+  /** shares of the sea's rumble, its waves washing past, the wind's hiss, its gusts and the rain's hiss */
+  sea: number; waves: number; wind: number; gusts: number; rain: number;
+  /** the sea falls off with the height down to this share (the spotter pod still hears it from far up) */
+  seaFloor: number;
+  /** inside: the wind whistling round the windows in a storm, rain on the glass, the air conditioning */
+  whistle: number; glass: number; hvac: number;
+  /** the ship's machines through the hull; its engine as heard on deck (null: by how near the camera is to it) */
+  hum: number; engine: number | null;
+  /** bangs and engines outside, through the hull or the glass: low-passed (Hz) and quieter */
+  outside: number; outsideLevel: number;
+  /** the ship computer's voice: a little quieter where it is quiet round it (inside the ship, in a cab) */
+  voice: number;
+}
+
+const OPEN = 20000;
+const SCENES: Record<SoundScene, SceneMix> = {
+  // the operations room under the map, deep in the ship: the machines' drone, the air conditioning, the sea faint outside
+  karte: { muffle: 320, through: 0.5, sea: 0.5, waves: 0.6, wind: 0.2, gusts: 0, rain: 0.15, seaFloor: 0.15, whistle: 0, glass: 0, hvac: 1, hum: 1, engine: 0, outside: 450, outsideLevel: 0.45, voice: 0.7 },
+  // the bridge: the sea a little louder through the windows, the machines, in a storm the wind whistling, rain on the glass
+  bruecke: { muffle: 900, through: 0.6, sea: 0.65, waves: 1.6, wind: 0.3, gusts: 0, rain: 0.2, seaFloor: 0.15, whistle: 1, glass: 1, hvac: 0, hum: 0.7, engine: 0, outside: 1600, outsideLevel: 0.7, voice: 0.7 },
+  // a camera out on deck: the weather, the sea louder, the ship's engine
+  deck: { muffle: OPEN, through: 1, sea: 1.3, waves: 2, wind: 1, gusts: 0.5, rain: 1, seaFloor: 0.15, whistle: 0, glass: 0, hvac: 0, hum: 0, engine: 4, outside: OPEN, outsideLevel: 1, voice: 1 },
+  // the spotter pod high up under its chute: loud wind, the sea far below
+  sonde: { muffle: OPEN, through: 1, sea: 1.6, waves: 2, wind: 1.3, gusts: 1, rain: 0.7, seaFloor: 0.5, whistle: 0, glass: 0, hvac: 0, hum: 0, engine: 0, outside: OPEN, outsideLevel: 1, voice: 1 },
+  // the Skua's cockpit, the Otter's cab: the outside muffled through the glass (as before)
+  kabine: { muffle: 1100, through: 0.5, sea: 1, waves: 0, wind: 1, gusts: 0, rain: 1, seaFloor: 0.15, whistle: 0, glass: 0, hvac: 0, hum: 0, engine: null, outside: OPEN, outsideLevel: 1, voice: 0.8 },
+  // every other camera (a unit's from outside, an island's, the title's): as before
+  aussen: { muffle: OPEN, through: 1, sea: 1, waves: 0, wind: 1, gusts: 0, rain: 1, seaFloor: 0.15, whistle: 0, glass: 0, hvac: 0, hum: 0, engine: null, outside: OPEN, outsideLevel: 1, voice: 1 },
+};
+/** how fast one soundscape fades into the next (time constant, s): about as quick as a cut, without a click */
+const SCENE_FADE = 0.2;
+
+const smooth = (a: number, b: number, x: number) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
 /**
  * The game's sound (Web Audio): sea, wind, rain and thunder, the engines and UI blips are synthesised as they play;
  * explosions, shells, splashes and fire mix recordings (CC0) with synthesis, a little different every time. Lasers,
  * the missile's launch, hits on vehicles, debris and the hit confirmations are worked out in code once when the
  * sound starts (forge.ts) and then played like recordings. One-shots are positional and the further away the duller; near islands they echo. The listener
- * sits at the active camera — the "microphone" of the remote camera the player is watching through.
+ * sits at the active camera — the "microphone" of the remote camera the player is watching through. Each view has
+ * its own soundscape (scene()): the operations room under the map, the bridge, the deck, the spotter pod, a cab.
  */
 export class SoundEngine {
   enabled = true;
   readonly levels: SoundLevels = { master: 0.8, effects: 0.9, ambience: 0.7, engines: 0.7, music: 0.7, voice: 0.9 };
   private ctx: AudioContext | null = null;
   private master!: GainNode;
-  private bus!: { effects: GainNode; ambience: GainNode; engines: GainNode; voice: GainNode };
+  /** room: what is heard inside the ship itself (the air conditioning, rain on the bridge's glass), at the ambience's level */
+  private bus!: { effects: GainNode; ambience: GainNode; engines: GainNode; voice: GainNode; room: GainNode };
   /** effects and engines pass through this, to step back while the voice speaks */
   private duckNode!: GainNode;
-  /** the weather and the sea as heard from inside a cab: through the glass, muffled and quieter (cabin()) */
+  /** the weather and the sea as heard from inside (a cab, the bridge, the operations room): muffled and quieter */
   private muffle!: BiquadFilterNode;
   private muffleGain!: GainNode;
+  /** sea and weather step back through this while the voice speaks */
+  private ambDuck!: GainNode;
+  /** bangs and engines out there as heard from inside the ship: through the hull or the glass */
+  private outFx!: { filter: BiquadFilterNode; gain: GainNode };
+  private outEng!: { filter: BiquadFilterNode; gain: GainNode };
+  /** the soundscape of the view the player looks through (scene()) */
+  private mix: SceneMix = SCENES.aussen;
+  private sceneNow: SoundScene = 'aussen';
+  /** the soundscapes' loops (forge.ts): their gains are there from the start, the sound comes once it is worked out */
+  private beds = new Map<BedKind, { gain: GainNode; src: AudioBufferSourceNode | null }>();
+  /** the sea's waves into this: duller from far up */
+  private wavesFilter!: BiquadFilterNode;
+  /** the ship's machines through its hull (their pitch and brightness follow the speed), and the air conditioning */
+  private room: { hum: GainNode; shaft: OscillatorNode[]; tone: BiquadFilterNode; hvac: GainNode } | null = null;
   private white!: AudioBuffer;
   private brown!: AudioBuffer;
   private voices = 0;
@@ -126,18 +189,29 @@ export class SoundEngine {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 4;
     this.master.connect(comp).connect(ctx.destination);
-    this.bus = { effects: ctx.createGain(), ambience: ctx.createGain(), engines: ctx.createGain(), voice: ctx.createGain() };
+    this.bus = { effects: ctx.createGain(), ambience: ctx.createGain(), engines: ctx.createGain(), voice: ctx.createGain(), room: ctx.createGain() };
     this.duckNode = ctx.createGain();
     this.duckNode.connect(this.master);
     this.bus.effects.connect(this.duckNode);
     this.bus.engines.connect(this.duckNode);
-    this.muffle = ctx.createBiquadFilter(); this.muffle.type = 'lowpass'; this.muffle.frequency.value = 20000; this.muffle.Q.value = 0.7;
+    this.muffle = ctx.createBiquadFilter(); this.muffle.type = 'lowpass'; this.muffle.frequency.value = OPEN; this.muffle.Q.value = 0.7;
     this.muffleGain = ctx.createGain();
-    this.bus.ambience.connect(this.muffle).connect(this.muffleGain).connect(this.master);
+    this.ambDuck = ctx.createGain();
+    this.bus.ambience.connect(this.muffle).connect(this.muffleGain).connect(this.ambDuck).connect(this.master);
+    this.bus.room.connect(this.master);
+    const through = (to: AudioNode) => {
+      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = OPEN; filter.Q.value = 0.7;
+      const gain = ctx.createGain();
+      filter.connect(gain).connect(to);
+      return { filter, gain };
+    };
+    this.outFx = through(this.bus.effects);
+    this.outEng = through(this.bus.engines);
     this.bus.voice.connect(this.master);
     this.white = this.noiseBuffer('white');
     this.brown = this.noiseBuffer('brown');
     this.buildAmbience();
+    this.buildRoom();
     this.buildEngines();
     this.buildDefenceLoops();
     this.buildEcho();
@@ -155,17 +229,18 @@ export class SoundEngine {
     try { return await this.ctx.decodeAudioData(await (await fetch(url)).arrayBuffer()); } catch (e) { console.warn(`Klang ${url} nicht geladen`, e); return null; }
   }
 
-  /** the ship computer says a line (voice.ts): effects and engines step back while it speaks; returns its length (s) */
+  /** the ship computer says a line (voice.ts): effects, engines, sea and weather step back while it speaks; returns its length (s) */
   speak(buf: AudioBuffer): number {
     if (!this.ctx) return 0;
     const ctx = this.ctx, t = ctx.currentTime, src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(this.bus.voice);
     src.start(t);
-    const g = this.duckNode.gain;
-    if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t); else g.cancelScheduledValues(t);
-    g.setTargetAtTime(SPEECH_DUCK, t, 0.06);
-    g.setTargetAtTime(1, t + buf.duration, 0.35);
+    for (const [g, to] of [[this.duckNode.gain, SPEECH_DUCK], [this.ambDuck.gain, SPEECH_DUCK_AMB]] as const) {
+      if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t); else g.cancelScheduledValues(t);
+      g.setTargetAtTime(to, t, 0.06);
+      g.setTargetAtTime(1, t + buf.duration, 0.35);
+    }
     return buf.duration;
   }
 
@@ -176,13 +251,25 @@ export class SoundEngine {
       const list: AudioBuffer[] = [];
       for (let v = 0; v < f.variants; v++) {
         await new Promise(r => setTimeout(r, 0));
-        const x = forge(f.kind, v, ctx.sampleRate), buf = ctx.createBuffer(1, x.length, ctx.sampleRate);
+        const sr = Math.round(ctx.sampleRate * f.rate), x = forge(f.kind, v, sr), buf = ctx.createBuffer(1, x.length, sr);
         buf.copyToChannel(x as Float32Array<ArrayBuffer>, 0);
         list.push(buf);
         this.samples.set(f.kind, list);
       }
       if (f.kind === 'duesen') this.startJet();
+      else if (f.loop) this.startBed(f.kind as LoopKind);
     }
+  }
+
+  /** a soundscape's loop, once worked out, into its gain (from a random point, so it does not start on the same wave) */
+  private startBed(kind: BedKind) {
+    const bed = this.beds.get(kind), buf = this.samples.get(kind)?.[0];
+    if (!bed || !buf || bed.src) return;
+    const src = this.ctx!.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    src.connect(bed.gain);
+    src.start(0, Math.random() * buf.duration);
+    bed.src = src;
   }
 
   private startJet() {
@@ -211,6 +298,8 @@ export class SoundEngine {
       } catch (e) { console.warn(`Klang ${path} nicht geladen`, e); }
     }));
     if (this.samples.has('feuer-schleife')) this.buildFire();
+    this.startBed('scheibe-leicht');
+    this.startBed('scheibe-stark');
   }
 
   /**
@@ -304,7 +393,7 @@ export class SoundEngine {
     for (const f of [118, 121.5]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(hl); o.start(); }
     const blade = ctx.createOscillator(), bg = ctx.createGain(); blade.frequency.value = 23; bg.gain.value = 0.4;
     blade.connect(bg).connect(am.gain); blade.start();
-    hl.connect(am).connect(hum).connect(hp).connect(this.bus.engines);
+    hl.connect(am).connect(hum).connect(hp).connect(this.outEng.filter);
     // a Hammerhead's motor: rushing noise in a band, a rumble under it and a thin whine
     const roar = ctx.createGain(); roar.gain.value = 0;
     const rp = this.panner(); rp.refDistance = 70;
@@ -315,7 +404,7 @@ export class SoundEngine {
     this.loopNoise('brown').connect(rumble).connect(rg).connect(roar);
     const whine = ctx.createOscillator(), wg = ctx.createGain(); whine.type = 'triangle'; whine.frequency.value = 1400; wg.gain.value = 0.04;
     whine.connect(wg).connect(roar); whine.start();
-    roar.connect(rp).connect(this.bus.effects);
+    roar.connect(rp).connect(this.outFx.filter);
     this.defenceLoops = { servo: { gain: servo, motor: so, octave: so2, filter: sf, teeth }, hum: { gain: hum, panner: hp }, roar: { gain: roar, panner: rp, band, whine } };
   }
 
@@ -385,7 +474,9 @@ export class SoundEngine {
   duck(v: number) {
     if (Math.abs(v - this.duckBy) < 0.005) return;
     this.duckBy = v;
-    if (this.ctx) this.bus.ambience.gain.setTargetAtTime(this.levels.ambience * v, this.ctx.currentTime, 0.4);
+    if (!this.ctx) return;
+    this.bus.ambience.gain.setTargetAtTime(this.levels.ambience * v, this.ctx.currentTime, 0.4);
+    this.bus.room.gain.setTargetAtTime(this.levels.ambience * v, this.ctx.currentTime, 0.4);
   }
 
   applyLevels() {
@@ -394,8 +485,9 @@ export class SoundEngine {
     this.master.gain.setTargetAtTime(this.enabled ? this.levels.master : 0, t, 0.05);
     this.bus.effects.gain.setTargetAtTime(this.levels.effects, t, 0.05);
     this.bus.ambience.gain.setTargetAtTime(this.levels.ambience * this.duckBy, t, 0.05);
+    this.bus.room.gain.setTargetAtTime(this.levels.ambience * this.duckBy, t, 0.05);
     this.bus.engines.gain.setTargetAtTime(this.levels.engines, t, 0.05);
-    this.bus.voice.gain.setTargetAtTime(this.levels.voice * SPEECH_GAIN, t, 0.05);
+    this.bus.voice.gain.setTargetAtTime(this.levels.voice * SPEECH_GAIN * this.mix.voice, t, 0.05);
   }
 
   private noiseBuffer(kind: 'white' | 'brown'): AudioBuffer {
@@ -451,19 +543,105 @@ export class SoundEngine {
     this.loopNoise('white').connect(rainFilter).connect(rain).connect(this.bus.ambience);
     sea.gain.value = wind.gain.value = rain.gain.value = 0;
     this.amb = { sea, seaFilter, wind, windFilter, rain };
+    // the loops (forge.ts): the sea's waves and the wind's gusts from outside, through the muffle like the rest;
+    // the whistling and the rain on the glass inside, on the bridge
+    this.wavesFilter = ctx.createBiquadFilter(); this.wavesFilter.type = 'lowpass'; this.wavesFilter.frequency.value = OPEN;
+    this.wavesFilter.connect(this.bus.ambience);
+    const bed = (kind: BedKind, to: AudioNode) => {
+      const gain = ctx.createGain(); gain.gain.value = 0;
+      gain.connect(to);
+      this.beds.set(kind, { gain, src: null });
+    };
+    bed('seegang', this.wavesFilter);
+    bed('boeen', this.bus.ambience);
+    bed('pfeifen', this.bus.room);
+    bed('scheibe-leicht', this.bus.room);
+    bed('scheibe-stark', this.bus.room);
   }
 
-  /** waves 0..3, wind m/s, rain 0..1, camera height above the sea */
+  /**
+   * Inside the ship: its machines through the hull (the generators' drone, two diesels a little apart that beat
+   * slowly, with overtones a small speaker gives, and the shafts' rumble under them) and the air conditioning in the
+   * operations room (air rushing softly from the vents, the fan's whirr in it)
+   */
+  private buildRoom() {
+    const ctx = this.ctx!;
+    const hum = ctx.createGain(); hum.gain.value = 0;
+    const hl = ctx.createBiquadFilter(); hl.type = 'lowpass'; hl.frequency.value = 320; hl.Q.value = 0.8;
+    const shaft = [49, 49.6, 73.8].map((f, i) => {
+      const o = ctx.createOscillator(); o.type = i < 2 ? 'sawtooth' : 'triangle'; o.frequency.value = f;
+      const g = ctx.createGain(); g.gain.value = i < 2 ? 0.5 : 0.25;
+      o.connect(g).connect(hl); o.start();
+      return o;
+    });
+    const rumble = ctx.createBiquadFilter(); rumble.type = 'lowpass'; rumble.frequency.value = 120;
+    const rg = ctx.createGain(); rg.gain.value = 0.9;
+    this.loopNoise('brown').connect(rumble).connect(rg).connect(hum);
+    hl.connect(hum);
+    hum.connect(this.bus.engines);
+    const hvac = ctx.createGain(); hvac.gain.value = 0;
+    const air = ctx.createBiquadFilter(); air.type = 'bandpass'; air.frequency.value = 520; air.Q.value = 0.5;
+    const soft = ctx.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2200;
+    this.loopNoise('white').connect(air).connect(soft).connect(hvac);
+    const fan = ctx.createGain(); fan.gain.value = 0.14;
+    const blade = ctx.createOscillator(), bg = ctx.createGain(); blade.frequency.value = 27; bg.gain.value = 0.05;
+    blade.connect(bg).connect(fan.gain); blade.start();
+    const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 700;
+    for (const [type, f, g] of [['triangle', 112, 1], ['sine', 224, 0.5], ['sine', 466, 0.18]] as const) {
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.type = type; o.frequency.value = f; og.gain.value = g;
+      o.connect(og).connect(fl); o.start();
+    }
+    fl.connect(fan).connect(hvac);
+    hvac.connect(this.bus.room);
+    this.room = { hum, shaft, tone: hl, hvac };
+  }
+
+  /** the view the player looks through changes: its soundscape fades in (the outside through the hull or the glass …) */
+  scene(s: SoundScene) {
+    if (s === this.sceneNow) return;
+    this.sceneNow = s;
+    this.mix = SCENES[s];
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime, m = this.mix;
+    this.muffle.frequency.setTargetAtTime(m.muffle, t, SCENE_FADE);
+    this.muffleGain.gain.setTargetAtTime(m.through, t, SCENE_FADE);
+    for (const o of [this.outFx, this.outEng]) {
+      o.filter.frequency.setTargetAtTime(m.outside, t, SCENE_FADE);
+      o.gain.gain.setTargetAtTime(m.outsideLevel, t, SCENE_FADE);
+    }
+    this.bus.voice.gain.setTargetAtTime(this.levels.voice * SPEECH_GAIN * m.voice, t, SCENE_FADE);
+  }
+
+  /** waves 0..3, wind m/s, rain 0..1, camera height above the sea; the soundscape is the view's (scene()) */
   ambience(dt: number, waves: number, wind: number, rain: number, height: number, storm: number) {
     if (!this.ctx || !this.amb) return;
-    const t = this.ctx.currentTime;
+    const t = this.ctx.currentTime, m = this.mix;
     // when the sound first starts, sea, wind and rain swell in instead of setting in at once
     this.ambIn = Math.min(1, this.ambIn + dt / AMBIENCE_FADE_IN);
     const swell = this.ambIn * this.ambIn;
-    const high = THREE.MathUtils.clamp(1 - (height - 30) / 400, 0.15, 1);
-    this.amb.sea.gain.setTargetAtTime(0.26 * (0.5 + waves * 0.35) * high * swell, t, 0.4);
-    this.amb.wind.gain.setTargetAtTime(Math.min(0.5, 0.03 + wind / 22 * 0.22) * swell, t, 0.6);
-    this.amb.rain.gain.setTargetAtTime(rain * 0.22 * swell, t, 0.6);
+    const high = THREE.MathUtils.clamp(1 - (height - 30) / 400, m.seaFloor, 1);
+    // (the weather changes slowly by itself: these follow the view as quickly as it changes)
+    this.amb.sea.gain.setTargetAtTime(0.26 * (0.5 + waves * 0.35) * high * swell * m.sea, t, SCENE_FADE);
+    this.amb.wind.gain.setTargetAtTime(Math.min(0.5, 0.03 + wind / 22 * 0.22) * swell * m.wind, t, SCENE_FADE);
+    this.amb.rain.gain.setTargetAtTime(rain * 0.22 * swell * m.rain, t, SCENE_FADE);
+    const bed = (kind: BedKind, level: number, rate = 1) => {
+      const b = this.beds.get(kind)!;
+      b.gain.gain.setTargetAtTime(level * swell, t, SCENE_FADE);
+      if (b.src) b.src.playbackRate.setTargetAtTime(rate, t, 0.5);
+    };
+    // the waves washing past: bigger and slower in a heavy sea, duller from far up
+    bed('seegang', 0.1 * (0.4 + waves * 0.3) * high * m.waves, 1.08 - waves * 0.06);
+    this.wavesFilter.frequency.setTargetAtTime(height > 120 ? 900 : OPEN, t, SCENE_FADE);
+    // the gusts: louder and quicker in a stronger wind
+    bed('boeen', 0.5 * Math.min(2, 0.4 + wind / 15) * m.gusts * (m.gusts < 1 ? smooth(6, 20, wind) : 1), 0.85 + Math.min(wind, 26) / 26 * 0.3);
+    // the bridge in a storm: the wind whistles, higher the stronger it blows; rain on the glass (recordings), drops, then a patter
+    const storming = smooth(12, 20, wind);
+    bed('pfeifen', 0.03 * storming * m.whistle, 0.9 + storming * 0.25);
+    bed('scheibe-leicht', 0.1 * smooth(0, 0.3, rain) * (1 - 0.5 * smooth(0.5, 1, rain)) * m.glass);
+    bed('scheibe-stark', 0.27 * smooth(0.25, 0.9, rain) * m.glass);
+    if (this.room) {
+      this.room.hvac.gain.setTargetAtTime(0.026 * m.hvac, t, SCENE_FADE);
+    }
     if (storm > 0.6) {
       this.thunderIn -= dt;
       if (this.thunderIn <= 0) { this.thunder(); this.thunderIn = 14 + Math.random() * 28; }
@@ -489,10 +667,11 @@ export class SoundEngine {
     const make = (positional: boolean, build: (out: GainNode) => Engine['set']): Engine => {
       const gain = ctx.createGain(); gain.gain.value = 0;
       const panner = positional ? this.panner() : null;
-      if (panner) gain.connect(panner).connect(this.bus.engines); else gain.connect(this.bus.engines);
+      if (panner) gain.connect(panner).connect(this.outEng.filter); else gain.connect(this.bus.engines);
       return { gain, panner, nodes: [], set: build(gain) };
     };
-    // carrier: deep two-oscillator drone plus rumble
+    // carrier: deep two-oscillator drone plus rumble, and the funnel's exhaust chuffing at the firing rate (that
+    // carries on a small speaker too, where the drone is too deep)
     const carrier = make(false, (out) => {
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 170;
       const o1 = ctx.createOscillator(), o2 = ctx.createOscillator();
@@ -500,8 +679,16 @@ export class SoundEngine {
       o1.connect(lp); o2.connect(lp); lp.connect(out);
       const rumble = ctx.createBiquadFilter(); rumble.type = 'lowpass'; rumble.frequency.value = 110;
       this.loopNoise('brown').connect(rumble).connect(out);
-      o1.start(); o2.start();
-      return (v) => { o1.frequency.value = 31 + v.speed * 9; o2.frequency.value = 46.7 + v.speed * 13; };
+      const ex = ctx.createBiquadFilter(); ex.type = 'bandpass'; ex.frequency.value = 210; ex.Q.value = 1.1;
+      const exG = ctx.createGain(); exG.gain.value = 0.6;
+      const firing = ctx.createOscillator(), fg = ctx.createGain(); fg.gain.value = 0.25;
+      firing.connect(fg).connect(exG.gain);
+      this.loopNoise('brown').connect(ex).connect(exG).connect(out);
+      o1.start(); o2.start(); firing.start();
+      return (v) => {
+        o1.frequency.value = 31 + v.speed * 9; o2.frequency.value = 46.7 + v.speed * 13; firing.frequency.value = 6.5 + v.speed * 4;
+        lp.frequency.value = 140 + v.speed * 60; ex.frequency.value = 180 + v.speed * 60;
+      };
     });
     // walrus: chugging diesel
     const walrus = make(true, (out) => {
@@ -566,19 +753,14 @@ export class SoundEngine {
         whine.frequency.value = 1150 + v.rpm * 180;
       };
     });
+    // a diesel's drone fades sooner with the distance than a jet's: an Otter driving home is not heard for long
+    walrus.panner!.rolloffFactor = 2;
     this.engines = { carrier, walrus, manta, drohne };
   }
 
-  /** the camera sits in a cab (the Skua's cockpit, the Otter's): the weather and the sea come muffled through the glass */
-  cabin(inside: boolean) {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    this.muffle.frequency.setTargetAtTime(inside ? 1100 : 20000, t, 0.15);
-    this.muffleGain.gain.setTargetAtTime(inside ? 0.5 : 1, t, 0.15);
-  }
-
-  /** levels 0..1; positions in world space; carrierNear 0..1 (how close the camera is to the ship); `cab`: the unit
-   *  whose cab the camera sits in (its own engine is loud there) */
+  /** levels 0..1; positions in world space; carrierNear 0..1 (how close the camera is to the ship, for a view whose
+   *  soundscape does not say how loud its engine is); `cab`: the unit whose cab the camera sits in (its own engine is
+   *  loud there) */
   enginesUpdate(o: {
     carrierSpeed: number; carrierNear: number; walrus: { on: boolean; rpm: number; pos: THREE.Vector3 };
     manta: { on: boolean; thrust: number; pos: THREE.Vector3 }; drohne: { on: boolean; rpm: number; pos: THREE.Vector3 };
@@ -588,7 +770,17 @@ export class SoundEngine {
     const t = this.ctx.currentTime, e = this.engines;
     const inCab = (u: 'walrus' | 'manta') => (o.cab === u ? CAB_ENGINE : 1);
     e.carrier.set({ speed: o.carrierSpeed });
-    e.carrier.gain.gain.setTargetAtTime((0.03 + o.carrierSpeed * 0.06) * o.carrierNear, t, 0.3);
+    // the engine idles quietly while the ship stands and grows louder with each step of the throttle (full ahead:
+    // about 18 dB over the idle)
+    e.carrier.gain.gain.setTargetAtTime((0.01 + o.carrierSpeed * 0.07) * (this.mix.engine ?? o.carrierNear), t, SCENE_FADE);
+    // inside, the machines drone through the hull: at a standstill only the generators, faint and low; with the speed
+    // the propulsion comes in, louder, higher and brighter (full ahead about 16 dB over the standstill)
+    if (this.room) {
+      const v = Math.min(1.5, o.carrierSpeed);
+      this.room.hum.gain.setTargetAtTime((0.03 + 0.15 * v) * this.mix.hum, t, SCENE_FADE);
+      this.room.shaft.forEach((s, i) => s.frequency.setTargetAtTime([49, 49.6, 73.8][i] * (0.75 + 0.25 * v), t, 1.5));
+      this.room.tone.frequency.setTargetAtTime(220 + 120 * v, t, 1.5);
+    }
     e.walrus.set({ rpm: o.walrus.rpm });
     e.walrus.gain.gain.setTargetAtTime(o.walrus.on ? (0.07 + o.walrus.rpm * 0.13) * inCab('walrus') : 0, t, 0.15);
     this.place(e.walrus.panner!, o.walrus.pos);
@@ -645,7 +837,7 @@ export class SoundEngine {
       // the air swallows the highs: the further, the duller
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
       lp.frequency.value = Math.max(450, 16000 * Math.exp(-dist / 900));
-      out.connect(lp).connect(p).connect(this.bus.effects);
+      out.connect(lp).connect(p).connect(this.outFx.filter);
     } else out.connect(this.bus.effects);
     build(out, t);
     this.voices++;

@@ -81,7 +81,14 @@ const GRIDS: Record<SeaStyle, { cell: number; uniform: number; half: number }> =
   stufen: { cell: 6, uniform: 70, half: 150 },
 };
 const GROWTH = 1.07;
-const GLINT_SUN = new THREE.Color('#f7e3b2'), GLINT_MOON = new THREE.Color('#9fb2c0');
+const GLINT_SUN = new THREE.Color('#fff3d8'), GLINT_MOON = new THREE.Color('#9fb2c0');
+/** each style's open sea far out and its haze under a clear sky (Environment.seaDeep / seaHaze): the mosaic and the
+ *  lines keep the turquoise, the Atlantic's steps a steel blue (the turquoise stood as a bright band over their dark sea) */
+const SEA_TONE: Record<SeaStyle, { deep: THREE.Color; haze: THREE.Color }> = {
+  mosaik: { deep: new THREE.Color(PAL.wasserTief), haze: new THREE.Color('#8ccfd6') },
+  linien: { deep: new THREE.Color(PAL.wasserTief), haze: new THREE.Color('#8ccfd6') },
+  stufen: { deep: new THREE.Color('#22465f'), haze: new THREE.Color('#8fa8b6') },
+};
 
 function warp(i: number, cell: number, uniform: number): number {
   const a = Math.abs(i);
@@ -118,11 +125,13 @@ export class Ocean {
     uLightDir: { value: new THREE.Vector3(0, 1, 0) },
     uGlint: { value: new THREE.Color() },
     uGlintK: { value: 0 },
+    // the picture's height in device pixels over 810: the sun's glints keep their size on a sharper screen
+    uPxScale: { value: 1 },
     /** the woodcut's four steps, trough to crest */
-    uStNavy: { value: new THREE.Color(PAL.stufenMarine) },
-    uStPetrol: { value: new THREE.Color(PAL.stufenPetrol) },
-    uStTeal: { value: new THREE.Color(PAL.stufenTeal) },
-    uStTurq: { value: new THREE.Color(PAL.stufenTuerkis) },
+    uStTal: { value: new THREE.Color(PAL.stufenTal) },
+    uStMitte: { value: new THREE.Color(PAL.stufenMitte) },
+    uStFlanke: { value: new THREE.Color(PAL.stufenFlanke) },
+    uStKamm: { value: new THREE.Color(PAL.stufenKamm) },
     /** the woodcut's storm: steel blue from trough to light flank, and which way the wind blows (foam streaks, lee) */
     uStormTal: { value: new THREE.Color(PAL.wasserSturmTal) },
     uStormKamm: { value: new THREE.Color(PAL.wasserSturmKamm) },
@@ -153,8 +162,10 @@ export class Ocean {
     this.setStyle(style);
   }
 
+  private style: SeaStyle = 'mosaik';
   /** show one of the seas (all are built, so switching costs nothing) */
   setStyle(style: SeaStyle) {
+    this.style = style;
     for (const k of STYLES) this.seas[k].visible = k === style;
   }
 
@@ -222,8 +233,8 @@ export class Ocean {
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', /* glsl */ `#include <common>
           uniform float uTime, uStorm, uSea, uToon, uAmp, uWind;
-          uniform vec3 uLightDir, uGlint, uStormTal, uStormKamm, uStNavy, uStPetrol, uStTeal, uStTurq;
-          uniform float uGlintK;
+          uniform vec3 uLightDir, uGlint, uStormTal, uStormKamm, uStTal, uStMitte, uStFlanke, uStKamm;
+          uniform float uGlintK, uPxScale;
           uniform vec2 uWindDir;
           uniform vec3 uShallow, uMid, uDeep, uFoam, uStormCol, uStormLine, uSeaFar, uIce, uIceDark;
           uniform vec3 uNavy, uPetrol, uTeal, uTurq, uGlanz;
@@ -279,6 +290,26 @@ export class Ocean {
             return (swell(sp + bend * 130.0, uTime) * group + (vnoise(sp / 170.0 + uTime * 0.01) - 0.5) * 0.9 + reach) * uAmp
               + confused * uStorm * uStorm * 0.6;
           }
+          // the sun's glints seen from high up (the spotter pod): one per cell of a grid on the water, at its own spot,
+          // a short dash along the wavelets' crests (across the wind), twinkling at its own pace. The cells are about
+          // eleven pixels across (of a picture 810 high) whatever the height (foot: m per such pixel), so each glint stays a few pixels big and apart
+          // from the next; the lobe says how many of them shine. (Thresholded noise made golden dust up there, or, made
+          // bigger, pale patches)
+          float sparkleLayer(vec2 sp, float cell, float lobe) {
+            vec2 q = vec2(dot(sp, vec2(-uWindDir.y, uWindDir.x)), dot(sp, uWindDir)) / cell;
+            vec2 id = floor(q), f = fract(q) - 0.5;
+            // (most small, a few big, bigger towards the heart of the reflection; the dash's long side keeps inside its cell)
+            float h = hash1(id), sz = hash1(id + 3.1), size = (0.05 + 0.16 * sz * sz) * (0.6 + 0.6 * lobe);
+            vec2 d = f - (vec2(hash1(id + 5.7), hash1(id + 9.2)) - 0.5) * vec2(0.3, 0.7);
+            d.x *= 0.4;
+            float r = length(d), aa = max(fwidth(r), 1e-4);
+            float pulse = sin(3.14159 * fract(uTime * (0.35 + 0.5 * h) + hash1(id + 1.7)));
+            return step(h, lobe * 0.6) * (0.35 + 0.65 * pulse * pulse) * (1.0 - smoothstep(size - aa, size + aa, r));
+          }
+          float sparkles(vec2 sp, float lobe, float foot) {
+            float oct = log2(max(foot * 11.0, 0.5)), o0 = floor(oct);
+            return mix(sparkleLayer(sp, exp2(o0), lobe), sparkleLayer(sp + 17.3, exp2(o0 + 1.0), lobe), smoothstep(0.6, 1.0, oct - o0));
+          }
           // a staircase with each riser anti-aliased over the pixel footprint w; where several steps fall into one
           // pixel it turns into the plain ramp (a smooth gradient instead of flicker in the distance)
           float stair(float x) {
@@ -317,19 +348,19 @@ export class Ocean {
           float dwob = 0.5 * sin(vWorld.x * 0.031 + vWorld.z * 0.027 + uTime * 0.35) + 0.3 * sin(vWorld.z * 0.07 - vWorld.x * 0.05);
           water = mix(uShallow, uMid, 1.0 - below(depth + dwob, 3.0));
           water = mix(water, uDeep, 1.0 - below(depth + dwob, 10.0));
-          // on open water the swell's height in four steps, navy in the troughs to turquoise on the crests; a higher sea
+          // on open water the swell's height in four steps, navy in the troughs to steel blue on the crests; a higher sea
           // widens them less than it grows, so its steps lie closer
           vec2 sp = vWorld.xz;
           float sh = seaField(sp);
           float bandH = 0.42 * (0.3 + 0.7 * uAmp);
           float sx = sh / bandH + 1.5;
           float lv = clamp(stair(sx), 0.0, 3.0);
-          vec3 m = mix(uStNavy, uStPetrol, clamp(lv, 0.0, 1.0));
-          m = mix(m, uStTeal, clamp(lv - 1.0, 0.0, 1.0));
-          m = mix(m, uStTurq, clamp(lv - 2.0, 0.0, 1.0) * 0.85);
+          vec3 m = mix(uStTal, uStMitte, clamp(lv, 0.0, 1.0));
+          m = mix(m, uStFlanke, clamp(lv - 1.0, 0.0, 1.0));
+          m = mix(m, uStKamm, clamp(lv - 2.0, 0.0, 1.0) * 0.85);
           // lighter towards the horizon, by the view alone (no facet noise in it)
           float fres = pow(1.0 - clamp(normalize(cameraPosition - vWorld).y, 0.0, 1.0), 3.0);
-          m = mix(m, mix(uStTeal, uGlanz, 0.5), fres * 0.6);
+          m = mix(m, mix(uStFlanke, uGlanz, 0.5), fres * 0.6);
           float openSea = smoothstep(14.0, 26.0, depth) * (1.0 - step(0.5, gi.y));
           water = mix(water, m, openSea);
           float tilt = lv / 1.5 - 1.0;
@@ -342,12 +373,17 @@ export class Ocean {
           float glint = (1.0 - below(rp, 1.0 - lobe * 0.7)) * 0.6 + (1.0 - below(rp, 1.0 - lobe * 0.38)) * 0.4;
           // (flecks smaller than a pixel would be glittering dust: there a soft sheen of the same strength instead)
           float glintFine = 1.0 - smoothstep(0.12, 0.35, fwidth(rp));
-          glint = (glint * glintFine + (1.0 - glintFine) * lobe * 0.3) * openSea;` : ''}
+          glint = glint * glintFine + (1.0 - glintFine) * lobe * 0.3;
+          // looking steeply down on the water (from the spotter pod, a high Skua) the flecks lie round instead of
+          // squeezed into dashes and read as golden dust: there separate twinkling glints instead
+          float steep = smoothstep(0.3, 0.5, toEye.y);
+          if (steep > 0.0) glint = mix(glint, sparkles(sp, lobe, sqrt(length(dFdx(sp)) * length(dFdy(sp))) * uPxScale), steep);
+          glint *= openSea;` : ''}
           // bad weather turns the sea dark slate and the white lines grey (Wind Waker)${mosaic ? `; the mosaic keeps its
           // facets in it, each slate a shade darker or lighter by its tilt, and flecks of foam on the steep ones` : ''}
           ${mosaic ? `water = mix(water, uStormCol * mix(0.55, 1.5, clamp(tilt * 2.2, -1.0, 1.0) * 0.5 + 0.5), uSea * 0.85 * openSea);
           water = mix(water, uStormCol, uSea * 0.85 * (1.0 - openSea));` : steps ? `// (the woodcut keeps its steps in it, slate from dark to light)
-          // (after photographs of the North Sea in a gale: steel blue and greyish, no turquoise, lighter to the haze)
+          // (after photographs of the North Atlantic in a gale: dark slate, greyish, lighter to the haze)
           vec3 slate = mix(mix(uStormTal, uStormKamm, lv / 3.0), uStormKamm, fres * 0.5);
           water = mix(water, slate, uSea * 0.85 * openSea);
           water = mix(water, uStormCol, uSea * 0.85 * (1.0 - openSea));` : 'water = mix(water, uStormCol, uSea * 0.85);'}
@@ -360,7 +396,7 @@ export class Ocean {
           // surf: a crisp white band on the beach
           float foamBand = 1.6 + 0.6 * sin(uTime * 1.3 + vWorld.x * 0.05 + vWorld.z * 0.04);
           float foam = below(depth, foamBand);
-          // white caps on the crests, only in rough weather${steps ? `; the woodcut's after photographs of the North Sea:
+          // white caps on the crests, only in rough weather${steps ? `; the woodcut's after photographs of the North Atlantic:
           // from a fresh breeze on a white edge on the highest crests, but only on their lee side (where the sea falls
           // away downwind) and broken up, never a closed ring (those stood on every crest like doughnuts) nor a filled
           // patch (those read as ice floes); from a strong breeze on the white spills down the lee side, and in a gale
@@ -464,8 +500,13 @@ export class Ocean {
     this.uniforms.uWakeRect.value = rect;
   }
 
-  update(env: Environment, camera: THREE.Camera) {
+  /** `viewH`: the picture's height in device pixels (the sun's glints are sized by it) */
+  update(env: Environment, camera: THREE.Camera, viewH = 810) {
     this.uniforms.uTime.value = env.elapsed;
+    this.uniforms.uPxScale.value = viewH / 810;
+    // (the sky's far sea follows from the next frame on)
+    env.seaDeep.copy(SEA_TONE[this.style].deep);
+    env.seaHaze.copy(SEA_TONE[this.style].haze);
     this.uniforms.uAmp.value = env.w.waves;
     this.uniforms.uStorm.value = THREE.MathUtils.clamp((env.w.waves - 1) / 2.1, 0, 1);
     this.uniforms.uSea.value = env.w.sea;

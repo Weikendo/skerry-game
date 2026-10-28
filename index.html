@@ -624,6 +624,20 @@
   body.map-open #messages { z-index: 21; }
   /* H: only the picture */
   body.ui-hidden #deck, body.ui-hidden #helm, body.ui-hidden #help, body.ui-hidden #hud, body.ui-hidden #messages { display: none !important; }
+  /* the victory's film (src/ui/finale.ts): the console out of the way, a big word up in the sky once it is up (the ship sits in the middle) */
+  body.finale :is(#deck, #helm, #help, #hud, #messages, #cambar, #crosshair, #tut, #train, #guide, #supply, #map) { display: none !important; }
+  #finale { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2.2vh;
+    padding-top: 11vh; box-sizing: border-box; cursor: pointer; user-select: none; }
+  #finale.on { display: flex; }
+  #finale .word { font: 800 clamp(64px, 12vw, 200px)/1 -apple-system, sans-serif; letter-spacing: .14em; padding-left: .14em; color: #f2c46a;
+    text-shadow: 0 0 .5vw rgba(0,0,0,.55), 0 .6vw 2.4vw rgba(0,0,0,.6); opacity: 0; transform: scale(1.12); transition: opacity 1.4s ease-out, transform 2.6s cubic-bezier(.2,.7,.2,1); }
+  #finale.word-up .word { opacity: 1; transform: scale(1); }
+  /* a defeat: the end screen's red, without the gold's glow */
+  #finale.lost .word { color: #ef7a6a; }
+  #finale .hint { font: 600 clamp(13px, 1.3vw, 20px) -apple-system, sans-serif; letter-spacing: .08em; color: #dfe6ec; text-shadow: 0 1px 6px rgba(0,0,0,.8);
+    opacity: 0; transition: opacity 1s; }
+  #finale .hint.up { opacity: .85; animation: finale-hint 2.4s ease-in-out 1s infinite; }
+  @keyframes finale-hint { 50% { opacity: .45; } }
   @media (max-width: 700px) { #help { display: none; } }
 </style>
 </head>

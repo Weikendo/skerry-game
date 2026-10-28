@@ -19,7 +19,7 @@ type PlayerGood = (typeof PLAYER_GOODS)[number];
 /** the goods by who uses them (every one of PLAYER_GOODS, once) */
 const GROUPS: { title: string; goods: PlayerGood[] }[] = [
   { title: t('supply.grp.fuel'), goods: ['treibstoffTraeger', 'treibstoffWalrus', 'treibstoffManta'] },
-  { title: t('supply.grp.otter'), goods: ['accb', 'virus', 'tank'] },
+  { title: t('supply.grp.otter'), goods: ['accb', 'harbinger', 'virus', 'tank'] },
   { title: t('supply.grp.skua'), goods: ['assassin', 'quaker'] },
   { title: t('supply.grp.drone'), goods: ['funk'] },
   { title: t('supply.grp.ship', { ship: SHIP_NAME }), goods: ['taeuschkoerper', 'abwehrdrohne', 'hammerhead', 'beobachtungsdrohne'] },
@@ -233,8 +233,9 @@ export class SupplyScreen {
       this.choices = choices;
       this.select.innerHTML = e.stockpileChoices.map(k => `<option value="${k}"${k === e.stockpile ? ' selected' : ''}>${isl[k].name}</option>`).join('');
     }
-    for (const g of PLAYER_GOODS) {
-      const r = this.rows.get(g)!, o = e.orders[g];
+    // (row by row: a good without one, as the Harbinger once was, left every row after it empty)
+    for (const [g, r] of this.rows) {
+      const o = e.orders[g];
       r.prio.textContent = PRIORITY_NAMES[o.priority];
       r.prio.className = `prio p${o.priority}`;
       if (r.target) r.target.textContent = GOODS[g].fuel ? t('supply.fuelTarget', { n: FUEL_TARGET }) : String(o.target);

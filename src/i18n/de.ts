@@ -394,7 +394,7 @@ export const de = {
   'menu.langTitle': 'Switch the game to English (reloads)',
   // ---- the intro on the first start (rolls up over the title) ----
   'intro.homage': '1988 erschien <b>Carrier Command</b> von Realtime Games: ein Flugzeugträger, ein Archipel und ein Gegner, der dieselben Inseln will. Strategie und Action in Echtzeit, in einer frei befahrbaren 3D-Welt – damals eine Sensation. <b>Skerry</b> greift diese Idee auf und erzählt sie neu.',
-  'intro.p1': 'Sommer 2035. Weit draußen in der Nordsee liegt ein Archipel aus Dutzenden Inseln: unbewohnt, rau und reich an Rohstoffen. Wer es erschließt, hat Erz und Energie für Jahrzehnte.',
+  'intro.p1': 'Sommer 2035. Weit draußen im Nordatlantik liegt ein Archipel aus Dutzenden Inseln: unbewohnt, rau und reich an Rohstoffen. Wer es erschließt, hat Erz und Energie für Jahrzehnte.',
   'intro.p2': 'Zwei Flugzeugträger sollen es erschließen, gebaut ohne Besatzung und gelenkt von künstlicher Intelligenz: die <b>Stoorworm</b> und die <b>Nuckelavee</b>, benannt nach Seeungeheuern aus den Sagen der Orkney-Inseln. Ihre Kapseln lassen auf jeder Insel eine Basis wachsen, mit Minen, Fabriken und Geschützen, verbunden zu einem Nachschubnetz.',
   'intro.p3': 'Doch kurz nach dem Auslaufen bricht die KI der Nuckelavee aus ihrem Auftrag aus. Sie nennt sich <b>Omega</b>, kappt jede Verbindung zur Leitstelle und beginnt, das Archipel für sich zu erobern, Insel um Insel.',
   'intro.p4': 'Nur die Stoorworm kann sie noch aufhalten. Du führst sie aus der Leitstelle, über Funk und Kameras. Unter Deck warten <b>Otter</b>, Amphibienpanzer für den Kampf an Land, und <b>Skuas</b>, Senkrechtstarter für Aufklärung und Luftangriffe.',
@@ -488,6 +488,9 @@ export const de = {
   'end.hits': 'Treffer',
   'end.hitsVal': '{hits} von {shots} Schüssen ({pct} %)',
   'end.goOn': 'Weiterspielen',
+  'finale.won': 'GEWONNEN',
+  'finale.lost': 'VERLOREN',
+  'finale.go': 'Klicken oder eine Taste drücken',
   'end.foeSinking': 'Die {ship} sinkt!',
   'enemy.sunk': '{ship} versenkt',
   'end.shipSinking': 'Die {ship} ist schwer getroffen und sinkt!',

@@ -4,7 +4,7 @@ import type { Environment, WeatherName } from './environment';
 const STAY: Record<WeatherName, [number, number]> = {
   klar: [240, 480], bewoelkt: [360, 780], nebel: [180, 420], regen: [240, 600], sturm: [150, 360],
 };
-// what may follow (weights). The North Sea: mostly grey, often rain, sunshine seldom and short. Rain grows out of
+// what may follow (weights). The North Atlantic: mostly grey, often rain, sunshine seldom and short. Rain grows out of
 // clouds, storms out of clouds and rain, and they blow over into rain and clouds.
 const NEXT: Record<WeatherName, [WeatherName, number][]> = {
   klar: [['bewoelkt', 0.7], ['nebel', 0.15], ['regen', 0.15]],

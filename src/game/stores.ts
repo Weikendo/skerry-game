@@ -65,7 +65,7 @@ export const GOODS: Record<Good, GoodDef> = {
   beobachtungsdrohne: { name: t('good.beobachtungsdrohne'), short: t('good.beobachtungsdrohne.short'), unit: t('goodUnit.perOrder', { n: 2 }), pieces: 2, steps: 15, rawPerStep: 50, start: 4, cap: 8 },
 };
 export const GOOD_LIST = Object.keys(GOODS) as Good[];
-/** what the player's network makes and stores: the built-in weapons (Avatar, Quasar) and the retired Harbinger are left out */
+/** what the player's network makes and stores: the built-in weapons (Avatar, Quasar) are left out */
 export const PLAYER_GOODS = GOOD_LIST.filter(g => g !== 'avatar' && g !== 'quasar');
 export const FUELS = GOOD_LIST.filter(g => GOODS[g].fuel);
 /** the network keeps two carrier tanks of every fuel in stock (fixed in the original) */

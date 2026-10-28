@@ -393,7 +393,7 @@ export const en = {
   'menu.langTitle': 'Spiel auf Deutsch umstellen (lädt neu)',
   // ---- the intro on the first start (rolls up over the title) ----
   'intro.homage': 'In 1988 Realtime Games released <b>Carrier Command</b>: one aircraft carrier, one archipelago and an enemy after the same islands. Strategy and action in real time, in a 3D world you could roam freely – a sensation at the time. <b>Skerry</b> takes up that idea and tells it anew.',
-  'intro.p1': 'Summer 2035. Far out in the North Sea lies an archipelago of dozens of islands: uninhabited, rugged and rich in resources. Whoever develops it will have ore and energy for decades.',
+  'intro.p1': 'Summer 2035. Far out in the North Atlantic lies an archipelago of dozens of islands: uninhabited, rugged and rich in resources. Whoever develops it will have ore and energy for decades.',
   'intro.p2': 'Two aircraft carriers are sent to develop it, built without a crew and run by artificial intelligence: the <b>Stoorworm</b> and the <b>Nuckelavee</b>, named after sea monsters from the legends of the Orkney Islands. Their capsules grow a base on every island, with mines, factories and guns, linked into a supply network.',
   'intro.p3': 'But soon after they set sail, the Nuckelavee’s AI breaks free of its orders. It calls itself <b>Omega</b>, cuts every link to mission control and starts to conquer the archipelago for itself, island by island.',
   'intro.p4': 'Only the Stoorworm can still stop it. You command her from mission control, by radio and camera. Below deck wait the <b>Otters</b>, amphibious tanks for the fight on land, and the <b>Skuas</b>, VTOL jets for reconnaissance and air strikes.',
@@ -487,6 +487,9 @@ export const en = {
   'end.hits': 'Hits',
   'end.hitsVal': '{hits} of {shots} shots ({pct}%)',
   'end.goOn': 'Play on',
+  'finale.won': 'VICTORY',
+  'finale.lost': 'DEFEAT',
+  'finale.go': 'Click or press any key',
   'end.foeSinking': 'The {ship} is sinking!',
   'enemy.sunk': '{ship} sunk',
   'end.shipSinking': 'The {ship} is badly hit and sinking!',
