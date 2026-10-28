@@ -21,8 +21,12 @@ const TANK_HP = 2000;
 const RAISE = 20, RAISE_SHIP = SINK_TIME + 10;
 /** how far apart the tanks stand along the beach, and how far inland from the waterline (m) */
 const TANK_SIDES = [-120, -40, 40, 120], INLAND = 30;
-/** the Stoorworm lies this far beyond the deep-water line, the target ship this far out and this far to one side (m) */
-const SHIP_OUT = 400, DUMMY_OUT = 550, DUMMY_SIDE = 750;
+/**
+ * The Stoorworm lies this far beyond the deep-water line and this far along the coast from the tanks, its bow
+ * pointing at them: the Skua leaves the catapult straight towards the beach a good kilometre off, and the island
+ * comes at it obliquely. The target ship lies this much further out to sea (m).
+ */
+const SHIP_OUT = 400, SHIP_ALONG = 900, DUMMY_OFF = 750;
 /** islands that are someone's (their guns reach 950 m) and the Nuckelavee stay at least this far away, better
  *  much further (m) */
 const CLEAR_OF_ISLANDS = 1800, CLEAR_OF_FOE = 3500;
@@ -54,11 +58,14 @@ export function findRange(world: Archipelago, bases: IslandBase[], foe: { x: num
       let coast = 0;
       while (coast < 6000 && !deep(at(coast).x, at(coast).z)) coast += 40;
       if (coast >= 6000) continue;
-      // open sea in front and to both sides of the berth
+      // open sea in front of the beach
       let open = true;
       for (let s = 0; s <= 1600 && open; s += 100) { const p = at(coast + s); open = deep(p.x, p.z); }
-      for (const side of [-DUMMY_SIDE - 200, DUMMY_SIDE + 200]) { const p = at(coast + DUMMY_OUT, side); open &&= deep(p.x, p.z); }
       if (!open) continue;
+      // the berth along the coast, on whichever side has deep water round it and round the target ship
+      const sea = (out: number, side: number) => [[0, 0], [250, 0], [-250, 0], [0, 250], [0, -250]].every(([o, s]) => { const p = at(out + o, side + s); return deep(p.x, p.z); });
+      const sgn = [-1, 1].find(g => sea(coast + SHIP_OUT, g * SHIP_ALONG) && sea(coast + SHIP_OUT + DUMMY_OFF, g * SHIP_ALONG));
+      if (sgn === undefined) continue;
       // the tanks: a little inland from the waterline, on gentle ground
       const tanks: RangeSpot['tanks'] = [];
       for (const side of TANK_SIDES) {
@@ -75,18 +82,19 @@ export function findRange(world: Archipelago, bases: IslandBase[], foe: { x: num
         tanks.push({ x: p.x, z: p.z, heading: Math.atan2(dx, dz) });
       }
       if (tanks.length < TANK_SIDES.length) continue;
-      const berth = at(coast + SHIP_OUT), room = clear(berth.x, berth.z);
+      const berth = at(coast + SHIP_OUT, sgn * SHIP_ALONG), room = clear(berth.x, berth.z);
       const far = Math.hypot(berth.x - foe.x, berth.z - foe.z);
       if (room < CLEAR_OF_ISLANDS || far < CLEAR_OF_FOE) continue;
-      // the target ship to the side with more sea; it lies broadside to the Stoorworm
-      const side = deep(at(coast + DUMMY_OUT, DUMMY_SIDE + 400).x, at(coast + DUMMY_OUT, DUMMY_SIDE + 400).z) ? DUMMY_SIDE : -DUMMY_SIDE;
-      const dummy = at(coast + DUMMY_OUT, side);
-      const along = Math.atan2(dz, -dx);
+      // the bow straight at the tanks (the Skua leaves the catapult towards them); the target ship seaward, lying
+      // along the coast
+      const dummy = at(coast + SHIP_OUT + DUMMY_OFF, sgn * SHIP_ALONG);
+      const along = Math.atan2(dz, -dx), mid = { x: (tanks[1].x + tanks[2].x) / 2, z: (tanks[1].z + tanks[2].z) / 2 };
+      const bow = Math.atan2(mid.x - berth.x, mid.z - berth.z);
       // plenty of room and a short way to the beach
       const beach = Math.hypot(tanks[1].x - berth.x, tanks[1].z - berth.z);
       const score = Math.min(room, 8000) + Math.min(far, 12000) * 0.3 - beach * 2;
       if (!best || score > best.score) {
-        best = { score, spot: { island: k, carrier: { ...berth, heading: along }, ship: { ...dummy, heading: along + Math.PI / 2 }, tanks } };
+        best = { score, spot: { island: k, carrier: { ...berth, heading: bow }, ship: { ...dummy, heading: along }, tanks } };
       }
     }
   });

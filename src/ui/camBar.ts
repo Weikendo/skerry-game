@@ -14,18 +14,24 @@ export interface CamBarActions {
   zoomLevel(): { now: number; max: number };
   /** the camera head straight ahead again */
   ahead(): void;
+  /** a Skua in hand and in the air: whether it is turning about (null: no button) */
+  turnState(): boolean | null;
+  /** that Skua turns about */
+  turn(): void;
 }
 
 /** a trackpad (with its two buttons) for the pointer button */
 const TRACKPAD = '<svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M3.5 15h17M12 15v5"/><circle cx="12" cy="9.5" r="1.4"/></svg>';
+/** a U-turn for the Skua's "Wenden" */
+const TURN = '<svg viewBox="0 0 24 24"><path d="M7 20V10a5 5 0 0 1 10 0v7"/><path d="M13.5 13.5 17 17l3.5-3.5"/></svg>';
 /** how much one press of + or − zooms */
 const ZOOM_STEP = 1.4;
 
 /**
  * Camera controls at the bottom of the 3D view, over the Stoorworm's bar (testers found the click into the picture
  * that captures the pointer confusing): a switch for the trackpad and mouse that lights up while they steer the
- * camera and the aim (Esc lets them go), the current unit's cameras, zoom and a button to look straight ahead again.
- * Hidden over the map, in the menu and with H.
+ * camera and the aim (Esc lets them go), the current unit's cameras, zoom and a button to look straight ahead again;
+ * in a Skua in the air "Wenden" beside it. Hidden over the map, in the menu and with H.
  */
 export class CamBar {
   readonly el: HTMLDivElement;
@@ -33,6 +39,7 @@ export class CamBar {
   private name: HTMLElement;
   private zoomTxt: HTMLElement;
   private zoomBtn: Record<'in' | 'out', HTMLButtonElement>;
+  private turnBtn: HTMLButtonElement;
   private timer = 0;
 
   constructor(private actions: CamBarActions) {
@@ -46,13 +53,15 @@ export class CamBar {
       <span class="sep"></span>
       <button data-c="out" title="${t('cambar.zoomOut')}">−</button><b class="czoom"></b><button data-c="in" title="${t('cambar.zoomIn')}">+</button>
       <span class="sep"></span>
-      <button data-c="ahead" title="${t('cambar.aheadTitle')}">${ICON.centre}<span class="bt">${t('cambar.ahead')}</span></button>`;
+      <button data-c="ahead" title="${t('cambar.aheadTitle')}">${ICON.centre}<span class="bt">${t('cambar.ahead')}</span></button>
+      <button data-c="turn" title="${t('cmd.turnTitle')}" hidden>${TURN}<span class="bt">${t('cmd.turn')}</span></button>`;
     document.body.append(this.el);
     const q = <T extends HTMLElement>(s: string) => this.el.querySelector<T>(s)!;
     this.ptr = q('[data-c="ptr"]');
     this.name = q('.cname');
     this.zoomTxt = q('.czoom');
     this.zoomBtn = { in: q('[data-c="in"]'), out: q('[data-c="out"]') };
+    this.turnBtn = q('[data-c="turn"]');
     this.el.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-c]');
       if (!b) return;
@@ -60,6 +69,7 @@ export class CamBar {
       if (c === 'ptr') a.togglePointer();
       else if (c === 'prev' || c === 'next') a.camera(c === 'prev' ? -1 : 1);
       else if (c === 'in' || c === 'out') a.zoom(c === 'in' ? ZOOM_STEP : 1 / ZOOM_STEP);
+      else if (c === 'turn') a.turn();
       else a.ahead();
       b.blur();
       this.refresh();
@@ -87,5 +97,8 @@ export class CamBar {
     this.zoomTxt.textContent = `${num(z.now, 1)}×`;
     this.zoomBtn.in.disabled = z.now >= z.max - 0.01;
     this.zoomBtn.out.disabled = z.now <= 1.01;
+    const turn = a.turnState();
+    this.turnBtn.hidden = turn === null;
+    this.turnBtn.classList.toggle('on', !!turn);
   }
 }

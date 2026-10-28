@@ -52,9 +52,9 @@ const NEED = { turret: 3, skuaLaser: 2 };
 /** the console blocks whose buttons light up */
 const SHIP = '#deck .ublock[data-g="ship"]', OTTER = '#deck .ublock[data-g="otter"]', SKUA = '#deck .ublock[data-g="skua"]';
 /** the keys the cards name: on the keyboard, and the pad's button */
-type Act = 'fire' | 'missile' | 'harbinger' | 'hammer' | 'launch';
-const KEY: Record<Act, string> = { fire: 'Leertaste', missile: 'X', harbinger: 'X', hammer: 'X', launch: 'L' };
-const PAD_KEY: Record<Act, GlyphName> = { fire: 'rt', missile: 'lt', harbinger: 'rb', hammer: 'a', launch: 'b' };
+type Act = 'fire' | 'missile' | 'harbinger' | 'hammer' | 'launch' | 'turn';
+const KEY: Record<Act, string> = { fire: 'Leertaste', missile: 'X', harbinger: 'X', hammer: 'X', launch: 'L', turn: 'U' };
+const PAD_KEY: Record<Act, GlyphName> = { fire: 'rt', missile: 'lt', harbinger: 'rb', hammer: 'a', launch: 'b', turn: 'rs' };
 
 /**
  * The combat training (Hauptmenü → Kampftraining): a short scenario off a quiet island, with no enemy and no
@@ -191,6 +191,10 @@ export class Training {
   private count(n: number, of: number): string {
     return ` <b>(${Math.min(n, of)}/${of})</b>`;
   }
+  /** for the Skua: how to turn about after flying past */
+  private turnHint(): string {
+    return `<small>${t('train.turnHint', { key: this.key('turn'), btn: t('cmd.turn') })}</small>`;
+  }
   /** while the target ship goes down: that a new one comes */
   private shipNote(): string {
     return this.g.targets().shipUp ? '' : `<span class="note">${t('train.shipDown')}</span>`;
@@ -236,7 +240,7 @@ export class Training {
           const m = this.skuaUp();
           if (!m || !this.inUnit(m)) return this.steps.skuaUp.text();
           const tg = g.targets();
-          return t('train.skuaLaser', { island: tg.island, ...this.way(tg.beach), fly: this.controls('fly'), fire: this.key('fire') }) + this.count(this.hits.skuaLaser, NEED.skuaLaser);
+          return t('train.skuaLaser', { island: tg.island, ...this.way(tg.beach), fly: this.controls('fly'), fire: this.key('fire') }) + this.count(this.hits.skuaLaser, NEED.skuaLaser) + this.turnHint();
         },
         glow: () => (this.inUnit(this.skuaUp()) ? null : this.steps.skuaUp.glow!()),
       },
@@ -246,7 +250,7 @@ export class Training {
           const m = this.skuaUp();
           if (!m || !this.inUnit(m)) return this.steps.skuaUp.text();
           if (m.missiles <= 0 && !this.hits.skuaMissile) return t('train.skuaNoMissile', { btn: t('cmd.land') });
-          return t('train.skuaMissile', { key: this.key('missile'), n: m.missiles });
+          return t('train.skuaMissile', { key: this.key('missile'), n: m.missiles }) + this.turnHint();
         },
         glow: () => (this.inUnit(this.skuaUp()) ? null : this.steps.skuaUp.glow!()),
       },

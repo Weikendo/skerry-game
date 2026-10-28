@@ -981,6 +981,7 @@ function handleKeys(dt: number) {
   if (active === 'traeger' && (input.hit('KeyK') || (pad && input.hit('Pad.X')))) launchDecoys();
   if (active === 'traeger' && (input.hit('KeyX', 'Ptr.Second') || (pad && input.hit('Pad.A')))) hammerAction();
   if (active === 'manta' && (input.hit('KeyK') || (pad && input.hit('Pad.X')))) manta.dropBomb(combat);
+  if (active === 'manta' && (input.hit('KeyU') || (pad && input.hit('Pad.RS')))) turnSkua(manta);
   if (input.hit('KeyL') || (pad && input.hit('Pad.B'))) {
     if (active === 'walrus') walrus.toggleLaunch();
     else if (active === 'manta') manta.toggleLaunch();
@@ -1443,6 +1444,13 @@ function mapCommand(u: UnitId, id: string) {
     if (id === 'launch') drone.toggleLaunch(); else if (id === 'hold') drone.hold(); else if (id === 'home') drone.recall();
   }
 }
+/** "Wenden" (the camera bar's button, U, the pad's right stick pressed): a Skua in the air turns about (an auto-attack is called off) */
+function turnSkua(m: Manta) {
+  if (m.state !== 'flug') return;
+  if (strikes.active(m)) strikes.drop(m);
+  pilots.turnManta(m);
+  notify(t('order.turn', { unit: m.name }));
+}
 const fleetStatus = new FleetStatus(fleet);
 const map = new MapView(world, bases, fleet, survey, mapActions, fleetStatus);
 map.supply = { economy, transfer };
@@ -1658,6 +1666,8 @@ const camBar = new CamBar({
   zoom: (f) => cams.zoomBy(f),
   zoomLevel: () => ({ now: cams.zoomLevel, max: cams.current?.maxZoom ?? 6 }),
   ahead: () => cams.resetHead(),
+  turnState: () => active === 'manta' && manta.state === 'flug' ? pilots.isTurning(manta) : null,
+  turn: () => turnSkua(manta),
 });
 map.bottomInset = () => helm.height;
 // ---------- the console: the same two columns over the 3D view and the map ----------
@@ -2079,7 +2089,8 @@ function padRumble(dt: number) {
 }
 
 function updateSound(dt: number) {
-  sound.listener(camera);
+  // through the spotter pod the sound comes with its picture: a Hammerhead's blast at the strike, not 3 s after
+  sound.listener(camera, !params.entwickler && cams.current?.id === OBS_CAM);
   const toCarrier = camera.position.distanceTo(carrier.pos);
   const onCarrier = !params.entwickler && cams.current?.group === 'Träger';
   // in the Skua's cockpit or the Otter's cab the outside comes muffled through the glass, and its own engine is loud
@@ -2524,6 +2535,7 @@ function simulate(dt: number): number {
     if (wIn && (walrus.waypoint || pilots.isHome(walrus)) && pilots.walrusManual(wIn)) { pilots.setWalrus(walrus, null); notify(t('pilot.offUnit', { unit: walrus.name })); }
     if (mIn && strikes.active(manta) && pilots.mantaManual(mIn)) { strikes.drop(manta); notify(t('strike.off', { unit: manta.name })); }
     if (mIn && manta.waypoint && pilots.mantaManual(mIn)) { pilots.setManta(manta, null); notify(t('pilot.offUnit', { unit: manta.name })); }
+    if (mIn && pilots.turnManual(manta, mIn)) notify(t('pilot.offUnit', { unit: manta.name }));
     if (guiding) {
       walrus.guided!.steer.yaw = inp.axis(KEYS.right, KEYS.left);
       walrus.guided!.steer.pitch = inp.axis(KEYS.forward, KEYS.back);

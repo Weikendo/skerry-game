@@ -127,7 +127,8 @@ export class Input implements InputLike {
     this.padName = name;
     this.pad = pad;
     if (!pad) {
-      if (this.analog.size) { for (const k of this.analog.keys()) this.held.delete(k); this.analog.clear(); }
+      // the pad's codes let go (the trackpad's 'Ptr.…' stay: cleared here, a held click would count as a new one each frame)
+      for (const k of [...this.analog.keys()]) if (k.startsWith('Pad.')) { this.held.delete(k); this.analog.delete(k); }
       return;
     }
     let used = false;

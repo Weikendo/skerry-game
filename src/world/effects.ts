@@ -48,6 +48,8 @@ const Z = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0), DOWN = ne
 /** something that wants to hear explosions and impacts (the sound engine) */
 export interface EffectsListener {
   explosion(p: THREE.Vector3, scale: number): void;
+  /** a Hammerhead's warhead (its own, heavier sound) */
+  hammerHit(p: THREE.Vector3): void;
   impact(p: THREE.Vector3, surface: 'land' | 'water' | 'hit'): void;
   splash(p: THREE.Vector3, scale: number): void;
   debris(p: THREE.Vector3): void;
@@ -176,6 +178,12 @@ export class Effects {
    * Fireball, blast ring, debris (some of it burning and trailing smoke), smoke; scale 1 = a vehicle, 3 = a building.
    * Near the ground it leaves a scorch mark, on the water it throws up a column of spray instead.
    */
+  /** a Hammerhead's warhead going off: a big blast with a sound of its own */
+  hammerBlast(p: THREE.Vector3) {
+    this.explosion(p, 2.4, PAL.metall, true);
+    this.listener?.hammerHit(p);
+  }
+
   explosion(p: THREE.Vector3, scale = 1, debrisColor: THREE.ColorRepresentation = PAL.metall, quiet = false) {
     const r = this.rnd, ks = Math.sqrt(scale);
     // (`quiet`: its sound comes from elsewhere, a bursting defence drone's)

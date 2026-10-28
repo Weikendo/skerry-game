@@ -546,7 +546,8 @@ export class Combat {
       if (s.kind === 'quaker') { this.burst(s, at); return true; }
       const killed = hitT.hit(s.damage, at);
       // (a Hammerhead's is a big one, with the long roll of thunder after it)
-      if (MISSILES.includes(s.kind)) this.effects.explosion(at, s.kind === 'hammerhead' ? 1.9 : s.kind === 'harbinger' ? 1.3 : 0.8); else this.effects.impact(at, 'hit', d, s.heavy ? 1.3 : 1);
+      if (s.kind === 'hammerhead') this.effects.hammerBlast(at);
+      else if (MISSILES.includes(s.kind)) this.effects.explosion(at, s.kind === 'harbinger' ? 1.3 : 0.8); else this.effects.impact(at, 'hit', d, s.heavy ? 1.3 : 1);
       this.onHit?.({ target: hitT, team: s.team, kind: s.kind, at, dir: d.clone(), source: s.source, killed });
       if (killed) this.onKill?.({ target: hitT, by: s.team });
       if (s.guided) s.guided.done = true;
@@ -563,7 +564,8 @@ export class Combat {
         s.vel.x *= 0.7; s.vel.z *= 0.7;
         return false;
       }
-      if (MISSILES.includes(s.kind)) { this.effects.explosion(s.pos, s.kind === 'hammerhead' ? 1.3 : 0.6); this.effects.scorch(s.pos, s.kind === 'hammerhead' ? 8 : 4.5); }
+      if (s.kind === 'hammerhead') { this.effects.hammerBlast(s.pos); this.effects.scorch(s.pos, 8); }
+      else if (MISSILES.includes(s.kind)) { this.effects.explosion(s.pos, 0.6); this.effects.scorch(s.pos, 4.5); }
       else this.effects.impact(s.pos, 'land', d, s.heavy ? 1.3 : 1);
       if (s.guided) s.guided.done = true;
       return true;

@@ -70,6 +70,8 @@ export class SoundEngine {
   private thunderIn = 25;
   /** where the listener is (for the speed-of-sound delay) */
   private ear = new THREE.Vector3();
+  /** watching through the spotter pod: its picture is a feed, and the sound comes with it, without the delay */
+  private live = false;
   private fwd = new THREE.Vector3();
   private up = new THREE.Vector3();
   private samples = new Map<SampleGroup, AudioBuffer[]>();
@@ -82,10 +84,10 @@ export class SoundEngine {
   private fire: { gain: GainNode; panner: PannerNode } | null = null;
   /** warning beeps while an enemy has locked on to the unit in hand */
   private warnIn = 0;
-  /** the carrier defences' loops: the laser turret's servos, the nearest defence drone's propeller, the nearest
+  /** the carrier defences' loops: the laser turret's drive, the nearest defence drone's propeller, the nearest
    *  Hammerhead's motor */
   private defenceLoops: {
-    servo: { gain: GainNode; osc: OscillatorNode; filter: BiquadFilterNode };
+    servo: { gain: GainNode; motor: OscillatorNode; octave: OscillatorNode; filter: BiquadFilterNode; teeth: OscillatorNode };
     hum: { gain: GainNode; panner: PannerNode };
     roar: { gain: GainNode; panner: PannerNode; band: BiquadFilterNode; whine: OscillatorNode };
   } | null = null;
@@ -272,16 +274,28 @@ export class SoundEngine {
   /** the carrier defences' loops (silent until their sources say otherwise) */
   private buildDefenceLoops() {
     const ctx = this.ctx!;
-    // the turret's servos: a geared electric whine (a sawtooth through a resonant band) with a hiss of the gears
+    // the turret's drive, a heavy one (the small servo whine sounded like a toy): a deep electric motor (a low saw and
+    // its octave, darkly filtered), the slewing ring's gears grinding under it (rumbling noise beaten at the tooth
+    // rate) and a faint hiss of the hydraulics
     const servo = ctx.createGain(); servo.gain.value = 0;
-    const sf = ctx.createBiquadFilter(); sf.type = 'bandpass'; sf.Q.value = 2.5; sf.frequency.value = 600;
-    const so = ctx.createOscillator(); so.type = 'sawtooth'; so.frequency.value = 160;
-    so.connect(sf);
-    const gears = ctx.createBiquadFilter(); gears.type = 'bandpass'; gears.frequency.value = 2400; gears.Q.value = 1.2;
-    const gg = ctx.createGain(); gg.gain.value = 0.25;
-    this.loopNoise('white').connect(gears).connect(gg).connect(sf);
-    sf.connect(servo).connect(this.bus.engines);
-    so.start();
+    const sf = ctx.createBiquadFilter(); sf.type = 'lowpass'; sf.Q.value = 0.9; sf.frequency.value = 300;
+    const so = ctx.createOscillator(); so.type = 'sawtooth'; so.frequency.value = 44;
+    const so2 = ctx.createOscillator(); so2.type = 'square'; so2.frequency.value = 89;
+    const s2g = ctx.createGain(); s2g.gain.value = 0.3;
+    so.connect(sf); so2.connect(s2g).connect(sf);
+    sf.connect(servo);
+    const ring = ctx.createBiquadFilter(); ring.type = 'bandpass'; ring.frequency.value = 230; ring.Q.value = 1.3;
+    const grind = ctx.createGain(); grind.gain.value = 0.55;
+    const teeth = ctx.createOscillator(); teeth.frequency.value = 16;
+    const tg = ctx.createGain(); tg.gain.value = 0.45;
+    teeth.connect(tg).connect(grind.gain);
+    const ringGain = ctx.createGain(); ringGain.gain.value = 2.2;
+    this.loopNoise('brown').connect(ring).connect(grind).connect(ringGain).connect(servo);
+    const hiss = ctx.createBiquadFilter(); hiss.type = 'highpass'; hiss.frequency.value = 2600;
+    const hg = ctx.createGain(); hg.gain.value = 0.035;
+    this.loopNoise('white').connect(hiss).connect(hg).connect(servo);
+    servo.connect(this.bus.engines);
+    so.start(); so2.start(); teeth.start();
     // a defence drone's propeller: two slightly detuned saws, beaten by its two blades
     const hum = ctx.createGain(); hum.gain.value = 0;
     const hp = this.panner(); hp.refDistance = 30;
@@ -302,7 +316,7 @@ export class SoundEngine {
     const whine = ctx.createOscillator(), wg = ctx.createGain(); whine.type = 'triangle'; whine.frequency.value = 1400; wg.gain.value = 0.04;
     whine.connect(wg).connect(roar); whine.start();
     roar.connect(rp).connect(this.bus.effects);
-    this.defenceLoops = { servo: { gain: servo, osc: so, filter: sf }, hum: { gain: hum, panner: hp }, roar: { gain: roar, panner: rp, band, whine } };
+    this.defenceLoops = { servo: { gain: servo, motor: so, octave: so2, filter: sf, teeth }, hum: { gain: hum, panner: hp }, roar: { gain: roar, panner: rp, band, whine } };
   }
 
   /** the laser turret turning: 0..1 of its top rate (0 when still, or when it is not watched through its camera) */
@@ -310,9 +324,13 @@ export class SoundEngine {
     const s = this.defenceLoops?.servo;
     if (!s) return;
     const t = this.ctx!.currentTime;
-    s.gain.gain.setTargetAtTime(0.3 * level, t, 0.06);
-    s.osc.frequency.setTargetAtTime(150 + 230 * level, t, 0.08);
-    s.filter.frequency.setTargetAtTime(500 + 900 * level, t, 0.08);
+    // (a heavy turret: it spins up and runs down with some inertia)
+    const f = 42 + 46 * level;
+    s.gain.gain.setTargetAtTime(0.13 * level, t, 0.12);
+    s.motor.frequency.setTargetAtTime(f, t, 0.22);
+    s.octave.frequency.setTargetAtTime(f * 2.03, t, 0.22);
+    s.filter.frequency.setTargetAtTime(240 + 380 * level, t, 0.2);
+    s.teeth.frequency.setTargetAtTime(10 + 22 * level, t, 0.22);
   }
 
   /** the nearest defence drone (or none): its propeller hums from there */
@@ -587,9 +605,10 @@ export class SoundEngine {
     p.positionX.setTargetAtTime(pos.x, t, 0.03); p.positionY.setTargetAtTime(pos.y, t, 0.03); p.positionZ.setTargetAtTime(pos.z, t, 0.03);
   }
 
-  /** the listener follows the camera every frame */
-  listener(camera: THREE.Camera) {
+  /** the listener follows the camera every frame (`live`: a remote camera's feed, heard without the delay) */
+  listener(camera: THREE.Camera, live = false) {
     this.ear.copy(camera.position);
+    this.live = live;
     if (!this.ctx) return;
     const l = this.ctx.listener, t = this.ctx.currentTime, p = camera.position;
     const f = camera.getWorldDirection(this.fwd), u = this.up.set(0, 1, 0).applyQuaternion(camera.quaternion);
@@ -614,9 +633,9 @@ export class SoundEngine {
   private voice(pos: THREE.Vector3 | null, seconds: number, build: (out: AudioNode, t: number) => void, reach = 40) {
     if (!this.ctx || this.voices >= MAX_VOICES) return;
     const ctx = this.ctx;
-    // far away things are heard later: the flash first, then the bang
+    // far away things are heard later: the flash first, then the bang (not through the spotter pod's feed)
     const dist = pos ? pos.distanceTo(this.ear) : 0;
-    const delay = Math.min(3, dist / 343);
+    const delay = this.live ? 0 : Math.min(3, dist / 343);
     const t = ctx.currentTime + delay;
     const out = ctx.createGain();
     if (pos) {
@@ -696,6 +715,24 @@ export class SoundEngine {
       this.noiseBurst(out, t, { type: 'lowpass', f0: 400, f1: 60, peak: 0.8, attack: 0.01, decay: dur * 1.2, brown: true });
       this.tone(out, t, 'sine', 90, 28, 0.7, 0.005, dur * 0.6);
     }, 40 * (1 + scale));
+  }
+
+  /**
+   * A Hammerhead strikes home. The listener is usually far off, up at the spotter pod's camera, and the plain blast
+   * came through thin there; this one carries much further: the big blast with its long roll, a deep thump and a
+   * low rumble under it, and a second blast a moment later as what it struck goes up.
+   */
+  hammerHit(pos: THREE.Vector3) {
+    this.voice(pos, 8, (out, t) => {
+      this.sample(out, t, 'explosion-nah', 1, 0.72);
+      this.sample(out, t + 0.01, 'explosion-fern', 1, 0.66);
+      this.sample(out, t + 0.1, 'nachrollen', 0.9, 0.7, 0.3);
+      this.noiseBurst(out, t, { type: 'lowpass', f0: 4200, f1: 110, peak: 1, attack: 0.004, decay: 2.4, brown: false });
+      this.noiseBurst(out, t, { type: 'lowpass', f0: 320, f1: 35, peak: 1, attack: 0.008, decay: 3.4, brown: true });
+      this.tone(out, t, 'sine', 64, 20, 1, 0.004, 1.8);
+      this.sample(out, t + 0.55, 'explosion-nah', 0.55, 0.6);
+      this.noiseBurst(out, t + 0.55, { type: 'lowpass', f0: 1800, f1: 90, peak: 0.6, attack: 0.01, decay: 1.6, brown: true });
+    }, 420);
   }
 
   /** something big into the water (a blast, a wreck) */

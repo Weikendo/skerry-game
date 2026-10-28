@@ -29,6 +29,9 @@ const STALL = 12;
 /** what one unit's autopilot remembers */
 interface PilotState {
   input: VirtualInput; stuck: number; orbiting: boolean; home: boolean; slowed: boolean; braking: boolean;
+  /** the Skua turning about ("Wenden"): how far it still has to turn (rad), which way (+1: its yaw grows), its yaw a
+   *  frame ago, the height it holds, seconds since it began */
+  turn: { left: number; dir: number; lastYaw: number; alt: number; age: number } | null;
   /** caught on the carrier's hull: seconds it still backs off */
   unstick: number;
   /** the Otter's way to its waypoint round cliffs and over a landing (null: straight), the waypoint it was planned for, how often it was planned again */
@@ -44,7 +47,7 @@ export class UnitPilots {
   private st(u: object): PilotState {
     let s = this.states.get(u);
     if (!s) {
-      s = { input: new VirtualInput(), stuck: 0, orbiting: false, home: false, slowed: false, braking: false, unstick: 0, route: null, routeFor: null, replans: 0, homeRoute: null, homeGoal: null, homeAge: 0, aim: null, best: Infinity, since: 0 };
+      s = { input: new VirtualInput(), stuck: 0, orbiting: false, home: false, slowed: false, braking: false, turn: null, unstick: 0, route: null, routeFor: null, replans: 0, homeRoute: null, homeGoal: null, homeAge: 0, aim: null, best: Infinity, since: 0 };
       this.states.set(u, s);
     }
     return s;
@@ -78,7 +81,23 @@ export class UnitPilots {
   }
   /** map command: autopilot off and brake to a halt */
   stopWalrus(w: Walrus) { const s = this.st(w); w.waypoint = null; w.cruise = 0; s.home = false; s.braking = true; }
-  setManta(m: Manta, p: THREE.Vector2 | null) { m.waypoint = p; this.st(m).orbiting = false; }
+  setManta(m: Manta, p: THREE.Vector2 | null) { m.waypoint = p; const s = this.st(m); s.orbiting = false; s.turn = null; }
+
+  /** "Wenden": the Skua turns about in a steep banked turn, to the side it already leans to (else to the left),
+   *  holding its height; then it is the player's again (a waypoint it had is dropped) */
+  turnManta(m: Manta) {
+    const s = this.st(m);
+    m.waypoint = null; s.orbiting = false;
+    s.turn = { left: Math.PI, dir: m.bank > 0.05 ? -1 : 1, lastYaw: m.yaw, alt: m.pos.y, age: 0 };
+  }
+  isTurning(m: Manta): boolean { return !!this.st(m).turn; }
+  /** the player steers again: the turn is left off (not in its first half second, while keys held before let go) */
+  turnManual(m: Manta, input: InputLike): boolean {
+    const s = this.st(m);
+    if (!s.turn || s.turn.age < 0.5 || !this.mantaManual(input)) return false;
+    s.turn = null;
+    return true;
+  }
   /** the Manta has reached its waypoint and circles it */
   isOrbiting(m: Manta): boolean { return this.st(m).orbiting; }
 
@@ -233,6 +252,7 @@ export class UnitPilots {
 
   manta(m: Manta, dt: number): InputLike | null {
     const st = this.st(m);
+    if (st.turn) return this.turnAbout(m, st, dt);
     const wp = m.waypoint;
     if (!wp) return null;
     if (m.state === 'deck' || m.state === 'pad') { m.toggleLaunch(); return null; }
@@ -253,6 +273,27 @@ export class UnitPilots {
     v.set(k.noseUp, (climb + (1 - Math.cos(m.bank)) * 0.5 - m.pitch) * 3);
     v.set(k.more, ((dist < R * 2 ? 0.4 : 0.62) - m.throttle) * 4);
     void dt;
+    return v;
+  }
+
+  /** one step of "Wenden": banked up to 75° (some 12 s for the half circle at cruising speed), easing off towards the
+   *  end; the nose holds the height (never lower than 80 m over the ground), pulled against the sinking of a banked
+   *  wing (manta.ts fly: the nose is the climb); the thrust stays as it was */
+  private turnAbout(m: Manta, st: PilotState, dt: number): InputLike | null {
+    const tn = st.turn!;
+    if (m.state !== 'flug') { st.turn = null; return null; }
+    tn.age += dt;
+    tn.left -= wrap(m.yaw - tn.lastYaw) * tn.dir;
+    tn.lastYaw = m.yaw;
+    // (the last few degrees come as the wings roll level)
+    if (tn.left < 0.12) { st.turn = null; this.notify(t('pilot.turned', { unit: m.name })); return null; }
+    const k = MANTA_KEYS, v = st.input;
+    v.clear();
+    const wantBank = -tn.dir * Math.min(1.3, 0.3 + tn.left * 2.6);
+    v.set(k.right, (wantBank - m.bank) * 2.5);
+    const ground = m.pos.y - m.altitude;
+    const climb = THREE.MathUtils.clamp((Math.max(tn.alt, ground + 80) - m.pos.y) * 0.006, -0.12, 0.2);
+    v.set(k.noseUp, (climb - m.pitch) * 3 + (1 - Math.cos(m.bank)) * 0.34);
     return v;
   }
 }
