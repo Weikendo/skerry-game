@@ -1074,6 +1074,7 @@ export const de = {
   'set.bloom': 'Leuchten bei Nacht (Bloom)',
   'set.seaMosaic': 'Mosaik',
   'set.seaLines': 'Wellenlinien',
+  'set.seaSteps': 'Stufen',
   'set.kept': 'Die Einstellungen bleiben in diesem Browser bzw. in der App gespeichert.',
   'set.controlsNote': 'Die Tasten und Gesten stehen im Menü unter „Steuerung“.',
   'set.gameNote': 'Uhr, Tempo, Zeitraffer und Zufallswetter gehören zum Spielstand und werden mit ihm gespeichert. Uhrzeit und Wetter von Hand, Kameras, Welt und Testwerkzeuge stehen in den Entwicklerwerkzeugen.',

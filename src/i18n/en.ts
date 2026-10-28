@@ -1073,6 +1073,7 @@ export const en = {
   'set.bloom': 'Glow at night (bloom)',
   'set.seaMosaic': 'Mosaic',
   'set.seaLines': 'Wave lines',
+  'set.seaSteps': 'Bands',
   'set.kept': 'The settings are kept in this browser or in the app.',
   'set.controlsNote': 'The keys and gestures are under “Controls” in the menu.',
   'set.gameNote': 'The clock, its tempo, the time warp and the random weather belong to the saved game and are saved with it. Time and weather by hand, cameras, the world and the test tools are in the developer tools.',

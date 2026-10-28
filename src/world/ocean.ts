@@ -22,8 +22,30 @@ export function waveHeight(x: number, z: number, t: number, amp: number): number
   return h * amp;
 }
 
-const GLSL_WAVES = WAVES.map(([a, kx, kz, s]) =>
+const glslWaves = (w: typeof WAVES) => w.map(([a, kx, kz, s]) =>
   `h += ${a.toFixed(3)} * sin(dot(p, vec2(${kx.toFixed(3)}, ${kz.toFixed(3)})) + t * ${s.toFixed(3)});`).join('\n');
+const GLSL_WAVES = glslWaves(WAVES);
+/**
+ * The woodcut's swell for its bands (colour only, not buoyancy): nine long waves (70–330 m) from around the first
+ * one's way, each with its own length, heading and phase. Three alone cross into a lattice of ovals that repeats over
+ * the whole sea (plain to see from the spotter pod); the sum of many never quite repeats, like a real sea. Short waves
+ * stay out, they would break the bands into dots. Scaled to the spread the three had.
+ */
+const SWELL: [number, number, number, number, number][] = (() => {
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const main = Math.atan2(WAVES[0][2], WAVES[0][1]);
+  const w: [number, number, number, number, number][] = [];
+  for (let i = 0; i < 9; i++) {
+    const len = 70 + 260 * Math.pow(rnd(), 0.8), dir = main + (rnd() - 0.5) * 2.3, k = 2 * Math.PI / len;
+    // amp, kx, kz, speed (deep water, a little brisk), phase
+    w.push([Math.pow(len, 0.9), Math.cos(dir) * k, Math.sin(dir) * k, Math.sqrt(9.81 * k) * 1.4, rnd() * 2 * Math.PI]);
+  }
+  const spread = Math.sqrt(w.reduce((q, c) => q + c[0] * c[0], 0) / 2);
+  return w.map(([a, kx, kz, sp, ph]) => [a / spread * 0.48, kx, kz, sp, ph]);
+})();
+const GLSL_SWELL = SWELL.map(([a, kx, kz, sp, ph]) =>
+  `h += ${a.toFixed(3)} * sin(dot(p, vec2(${kx.toFixed(4)}, ${kz.toFixed(4)})) + t * ${sp.toFixed(3)} + ${ph.toFixed(2)});`).join('\n');
 
 // ground height (x) and ice flag (y) from the archipelago depth atlas
 const LOOKUP = /* glsl */ `
@@ -43,18 +65,23 @@ const LOOKUP = /* glsl */ `
   }`;
 
 /**
- * The two looks of the sea, chosen in the settings. Each has its own grid: cells of constant size near the camera
+ * The three looks of the sea, chosen in the settings. Each has its own grid: cells of constant size near the camera
  * (`cell` metres, `uniform` cells from the centre), growing towards the edge `half` cells out (≈ 21–24 km, beyond
  * the camera's far plane).
  *   mosaik  the title picture's sea: big facets, each with its own shade from navy to turquoise, light towards the horizon
  *   linien  the Wind Waker sea from before: a fine grid, white cell lines wandering over it
+ *   stufen  a colour woodcut: the swell's height in hard steps from navy in the troughs to turquoise on the crests,
+ *           bands that ride with the waves, white edges on the highest crests in a wind, the shallows in steps too
  */
-export type SeaStyle = 'mosaik' | 'linien';
+export type SeaStyle = 'mosaik' | 'linien' | 'stufen';
+const STYLES: SeaStyle[] = ['mosaik', 'linien', 'stufen'];
 const GRIDS: Record<SeaStyle, { cell: number; uniform: number; half: number }> = {
   mosaik: { cell: 14, uniform: 90, half: 150 },
   linien: { cell: 6, uniform: 70, half: 150 },
+  stufen: { cell: 6, uniform: 70, half: 150 },
 };
 const GROWTH = 1.07;
+const GLINT_SUN = new THREE.Color('#f7e3b2'), GLINT_MOON = new THREE.Color('#9fb2c0');
 
 function warp(i: number, cell: number, uniform: number): number {
   const a = Math.abs(i);
@@ -65,7 +92,7 @@ function warp(i: number, cell: number, uniform: number): number {
 }
 
 export class Ocean {
-  /** both seas; only the chosen one is visible */
+  /** all the seas; only the chosen one is visible */
   readonly mesh = new THREE.Group();
   private readonly seas: Record<SeaStyle, THREE.Mesh>;
   readonly uniforms = {
@@ -85,6 +112,21 @@ export class Ocean {
     uStorm: { value: 0 },
     /** weather darkening of the sea, 0..1 */
     uSea: { value: 0 },
+    /** the wind (m/s): the woodcut's crests foam from a fresh breeze on */
+    uWind: { value: 6 },
+    /** the woodcut's own sun (or moon) path: where the light comes from, and its colour and strength */
+    uLightDir: { value: new THREE.Vector3(0, 1, 0) },
+    uGlint: { value: new THREE.Color() },
+    uGlintK: { value: 0 },
+    /** the woodcut's four steps, trough to crest */
+    uStNavy: { value: new THREE.Color(PAL.stufenMarine) },
+    uStPetrol: { value: new THREE.Color(PAL.stufenPetrol) },
+    uStTeal: { value: new THREE.Color(PAL.stufenTeal) },
+    uStTurq: { value: new THREE.Color(PAL.stufenTuerkis) },
+    /** the woodcut's storm: steel blue from trough to light flank, and which way the wind blows (foam streaks, lee) */
+    uStormTal: { value: new THREE.Color(PAL.wasserSturmTal) },
+    uStormKamm: { value: new THREE.Color(PAL.wasserSturmKamm) },
+    uWindDir: { value: new THREE.Vector2(1, 0) },
     /** Wind Waker cell lines on the open sea, 0 = off */
     uToon: { value: 1 },
     // the mosaic's shades, and the sun's direction over the water (which way the lit facets face)
@@ -105,21 +147,20 @@ export class Ocean {
     this.uniforms.uDepthTex.value = world.depthTexture;
     this.uniforms.uIslandBounds.value = world.bounds;
     this.uniforms.uIslandTiles.value = world.tiles;
-    this.seas = { mosaik: this.build('mosaik'), linien: this.build('linien') };
-    this.mesh.add(this.seas.mosaik, this.seas.linien);
+    this.seas = { mosaik: this.build('mosaik'), linien: this.build('linien'), stufen: this.build('stufen') };
+    this.mesh.add(...STYLES.map(k => this.seas[k]));
     this.mesh.name = 'ocean';
     this.setStyle(style);
   }
 
-  /** show one of the two seas (both are built, so switching costs nothing) */
+  /** show one of the seas (all are built, so switching costs nothing) */
   setStyle(style: SeaStyle) {
-    this.seas.mosaik.visible = style === 'mosaik';
-    this.seas.linien.visible = style === 'linien';
+    for (const k of STYLES) this.seas[k].visible = k === style;
   }
 
   private build(style: SeaStyle): THREE.Mesh {
     const { cell: CELL, uniform: UNIFORM, half: HALF } = GRIDS[style];
-    const mosaic = style === 'mosaik';
+    const mosaic = style === 'mosaik', steps = style === 'stufen';
     const n = HALF * 2;
     const pos = new Float32Array((n + 1) * (n + 1) * 3);
     for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
@@ -135,9 +176,11 @@ export class Ocean {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setIndex(idx);
 
-    // the mosaic's sun path is narrower and more golden
+    // the mosaic's sun path is narrower and more golden; the woodcut cuts its own (below), the facets' would show
+    // the triangles under its smooth bands
     const mat = new THREE.MeshPhongMaterial({
-      color: 0xffffff, flatShading: true, shininess: mosaic ? 70 : 40, specular: new THREE.Color(mosaic ? '#8a7a5a' : '#4f6670'),
+      color: 0xffffff, flatShading: true, shininess: mosaic ? 70 : 40,
+      specular: new THREE.Color(mosaic ? '#8a7a5a' : steps ? '#000000' : '#4f6670'),
       fog: false, // own fog towards the far-sea colour, see below
     });
     mat.onBeforeCompile = (shader) => {
@@ -178,7 +221,10 @@ export class Ocean {
           vWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', /* glsl */ `#include <common>
-          uniform float uTime, uStorm, uSea, uToon;
+          uniform float uTime, uStorm, uSea, uToon, uAmp, uWind;
+          uniform vec3 uLightDir, uGlint, uStormTal, uStormKamm, uStNavy, uStPetrol, uStTeal, uStTurq;
+          uniform float uGlintK;
+          uniform vec2 uWindDir;
           uniform vec3 uShallow, uMid, uDeep, uFoam, uStormCol, uStormLine, uSeaFar, uIce, uIceDark;
           uniform vec3 uNavy, uPetrol, uTeal, uTurq, uGlanz;
           uniform vec2 uSunXZ;
@@ -207,6 +253,39 @@ export class Ocean {
             w = max(w, 1e-5);
             return clamp((min(v + 0.5 * w, hi) - max(v - 0.5 * w, lo)) / w, 0.0, 1.0);
           }
+          ${steps ? `
+          // the long swell once more, per pixel, so the bands' edges run smooth over the grid's triangles
+          float swell(vec2 p, float t) { float h = 0.0; ${GLSL_SWELL} return h; }
+          float hash1(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 45758.5453); }
+          float vnoise(vec2 p) {
+            vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash1(i), hash1(i + vec2(1.0, 0.0)), f.x), mix(hash1(i + vec2(0.0, 1.0)), hash1(i + vec2(1.0, 1.0)), f.x), f.y);
+          }
+          float chop(vec2 p, float t) {
+            return 0.55 * sin(dot(p, vec2(0.31, 0.22)) + t * 4.1) + 0.45 * sin(dot(p, vec2(-0.27, 0.36)) + t * 4.7)
+                 + 0.35 * sin(dot(p, vec2(0.45, -0.38)) + t * 5.9);
+          }
+          // the woodcut's sea for the colours: the long swell, its crests bent by a slow noise (the plain sines would cross
+          // into a lattice), a broad swell of noise over it, and the storm's confused short sea on top: drifting noise
+          // (the mesh's three chop sines would cross into a grid of dots), squared so a fresh breeze keeps clean edges
+          float seaField(vec2 sp) {
+            vec2 bend = vec2(vnoise(sp / 260.0), vnoise(sp / 260.0 + 31.7)) - 0.5 + 0.5 * (vec2(vnoise(sp / 610.0 + 5.3), vnoise(sp / 610.0 + 17.1)) - 0.5);
+            vec2 cp = mat2(0.87, 0.5, -0.5, 0.87) * sp;
+            float confused = (vnoise(cp / 15.0 + uTime * vec2(0.32, 0.19)) - 0.5) * 1.7 + (vnoise(cp / 6.5 - uTime * vec2(0.23, 0.41) + 4.7) - 0.5) * 0.8;
+            // (in groups, as a real sea runs: stretches of higher and of quieter sea, 600–800 m across; and broad darker
+            // and lighter reaches under it, so big shapes hold the small ones instead of one size of patch all over)
+            float group = 0.45 + 1.1 * vnoise(sp / 720.0 + uTime * vec2(0.012, 0.007));
+            float reach = (vnoise(sp / 480.0 + 11.3) - 0.5) * 1.3;
+            return (swell(sp + bend * 130.0, uTime) * group + (vnoise(sp / 170.0 + uTime * 0.01) - 0.5) * 0.9 + reach) * uAmp
+              + confused * uStorm * uStorm * 0.6;
+          }
+          // a staircase with each riser anti-aliased over the pixel footprint w; where several steps fall into one
+          // pixel it turns into the plain ramp (a smooth gradient instead of flicker in the distance)
+          float stair(float x) {
+            float w = fwidth(x);
+            float s = floor(x) + smoothstep(1.0 - clamp(w * 1.3, 1e-3, 1.0), 1.0, fract(x));
+            return mix(s, x, smoothstep(0.45, 1.1, w));
+          }` : ''}
           ${LOOKUP}
           uniform float uSeaFogNear, uSeaFogFar;
           uniform sampler2D uWakeTex;
@@ -233,9 +312,44 @@ export class Ocean {
           water = mix(water, m, openSea);
           // the shallows keep their colours, but in facets too: each a shade lighter or darker by its tilt
           water *= mix(1.0, 0.88 + 0.24 * (tilt * 0.5 + 0.5), (1.0 - smoothstep(2.5, 14.0, depth)) * (1.0 - step(0.5, gi.y)));` : ''}
+          ${steps ? `
+          // the woodcut: the shallows in three hard steps of depth (their edges wobble a little, like cut by hand)
+          float dwob = 0.5 * sin(vWorld.x * 0.031 + vWorld.z * 0.027 + uTime * 0.35) + 0.3 * sin(vWorld.z * 0.07 - vWorld.x * 0.05);
+          water = mix(uShallow, uMid, 1.0 - below(depth + dwob, 3.0));
+          water = mix(water, uDeep, 1.0 - below(depth + dwob, 10.0));
+          // on open water the swell's height in four steps, navy in the troughs to turquoise on the crests; a higher sea
+          // widens them less than it grows, so its steps lie closer
+          vec2 sp = vWorld.xz;
+          float sh = seaField(sp);
+          float bandH = 0.42 * (0.3 + 0.7 * uAmp);
+          float sx = sh / bandH + 1.5;
+          float lv = clamp(stair(sx), 0.0, 3.0);
+          vec3 m = mix(uStNavy, uStPetrol, clamp(lv, 0.0, 1.0));
+          m = mix(m, uStTeal, clamp(lv - 1.0, 0.0, 1.0));
+          m = mix(m, uStTurq, clamp(lv - 2.0, 0.0, 1.0) * 0.85);
+          // lighter towards the horizon, by the view alone (no facet noise in it)
+          float fres = pow(1.0 - clamp(normalize(cameraPosition - vWorld).y, 0.0, 1.0), 3.0);
+          m = mix(m, mix(uStTeal, uGlanz, 0.5), fres * 0.6);
+          float openSea = smoothstep(14.0, 26.0, depth) * (1.0 - step(0.5, gi.y));
+          water = mix(water, m, openSea);
+          float tilt = lv / 1.5 - 1.0;
+          // its sun path (the moon's at night): hard-edged flecks of light cut into the water, bigger towards the heart
+          // of the reflection; in the distance they blur into a glow instead of flickering
+          vec3 toEye = normalize(cameraPosition - vWorld);
+          // (its faint outskirts left out: they would sprinkle the whole sea with specks)
+          float lobe = max(pow(max(dot(vec3(-toEye.x, toEye.y, -toEye.z), normalize(uLightDir)), 0.0), 40.0) - 0.12, 0.0) / 0.88;
+          float rp = 0.6 * vnoise(sp / 6.5 + uTime * vec2(0.3, 0.18)) + 0.4 * vnoise(sp / 2.8 - uTime * vec2(0.14, 0.45));
+          float glint = (1.0 - below(rp, 1.0 - lobe * 0.7)) * 0.6 + (1.0 - below(rp, 1.0 - lobe * 0.38)) * 0.4;
+          // (flecks smaller than a pixel would be glittering dust: there a soft sheen of the same strength instead)
+          float glintFine = 1.0 - smoothstep(0.12, 0.35, fwidth(rp));
+          glint = (glint * glintFine + (1.0 - glintFine) * lobe * 0.3) * openSea;` : ''}
           // bad weather turns the sea dark slate and the white lines grey (Wind Waker)${mosaic ? `; the mosaic keeps its
           // facets in it, each slate a shade darker or lighter by its tilt, and flecks of foam on the steep ones` : ''}
           ${mosaic ? `water = mix(water, uStormCol * mix(0.55, 1.5, clamp(tilt * 2.2, -1.0, 1.0) * 0.5 + 0.5), uSea * 0.85 * openSea);
+          water = mix(water, uStormCol, uSea * 0.85 * (1.0 - openSea));` : steps ? `// (the woodcut keeps its steps in it, slate from dark to light)
+          // (after photographs of the North Sea in a gale: steel blue and greyish, no turquoise, lighter to the haze)
+          vec3 slate = mix(mix(uStormTal, uStormKamm, lv / 3.0), uStormKamm, fres * 0.5);
+          water = mix(water, slate, uSea * 0.85 * openSea);
           water = mix(water, uStormCol, uSea * 0.85 * (1.0 - openSea));` : 'water = mix(water, uStormCol, uSea * 0.85);'}
           vec3 lineCol = mix(uFoam, uStormLine, uSea * 0.75);
           ${mosaic ? `// (a whole facet foams: its flat normal is the same all over it, rounded so that pixel noise does not
@@ -246,10 +360,38 @@ export class Ocean {
           // surf: a crisp white band on the beach
           float foamBand = 1.6 + 0.6 * sin(uTime * 1.3 + vWorld.x * 0.05 + vWorld.z * 0.04);
           float foam = below(depth, foamBand);
-          // white caps on the crests, only in rough weather
-          float crest = (1.0 - below(vWorld.y / (1.3 + uStorm * 2.6), 0.97)) * smoothstep(0.35, 0.8, uSea);
+          // white caps on the crests, only in rough weather${steps ? `; the woodcut's after photographs of the North Sea:
+          // from a fresh breeze on a white edge on the highest crests, but only on their lee side (where the sea falls
+          // away downwind) and broken up, never a closed ring (those stood on every crest like doughnuts) nor a filled
+          // patch (those read as ice floes); from a strong breeze on the white spills down the lee side, and in a gale
+          // the wind lays foam out in long streaks along its way. The threshold counts in the sea's spread, so the share
+          // of white stays the same however high it runs.
+          float gust = smoothstep(8.0, 18.0, uWind), spread = 0.57 * uAmp / bandH;
+          float capT = 1.5 + spread * mix(2.2, 1.25, gust);
+          float breaking = smoothstep(10.0, 16.0, uWind) * openSea;
+          float crest = 0.0;
+          if (uWind > 7.0) {
+            // the slope from the pixel's neighbours: the sea's height gradient in the world, turned back from the screen's
+            mat2 toScreen = transpose(mat2(dFdx(sp), dFdy(sp)));
+            vec2 slope = inverse(toScreen) * vec2(dFdx(sh), dFdy(sh));
+            float fall = clamp(-dot(slope, uWindDir) * 4.0 / bandH, -2.0, 2.0), lee = smoothstep(0.03, 0.25, fall);
+            float broken = smoothstep(0.3, 0.55, vnoise(sp / 9.0 + uTime * vec2(0.05, 0.03)));
+            crest = (1.0 - below(sx, capT)) * below(sx, capT + mix(0.22, 0.5, gust)) * lee * broken * smoothstep(7.0, 10.0, uWind) * openSea;
+            crest = max(crest, (1.0 - below(sx, capT - mix(0.25, 0.85, gust))) * lee * (0.35 + 0.65 * broken) * breaking);
+            vec2 sw = vec2(dot(sp, uWindDir) / 60.0 - uTime * 0.06, dot(sp, vec2(-uWindDir.y, uWindDir.x)) / 6.0);
+            float sn = 0.65 * vnoise(sw) + 0.35 * vnoise(sw * vec2(2.3, 2.1) + 9.1), snW = fwidth(sn);
+            // (only on the faces falling away downwind, in patches, and gone before they turn into dotted lines far off)
+            float streak = band(sn, 0.59, 0.67, snW * 1.3) * smoothstep(0.38, 0.7, vnoise(sp / 85.0 + 3.3))
+              * smoothstep(0.0, 0.2, fall) * (1.0 - smoothstep(0.06, 0.2, snW));
+            crest = max(crest, streak * 0.85 * smoothstep(13.0, 20.0, uWind) * openSea);
+          }
+          // far off, where several steps fall into one pixel, the foam's cut shapes would break up into dots: there
+          // they become a light haze of the same share instead
+          float fine = 1.0 - smoothstep(0.3, 0.8, fwidth(sx));
+          crest = crest * fine + (1.0 - fine) * 0.13 * breaking;` : `
+          float crest = (1.0 - below(vWorld.y / (1.3 + uStorm * 2.6), 0.97)) * smoothstep(0.35, 0.8, uSea);`}
           float lines = 0.0;
-          ${mosaic ? '' : `
+          ${style !== 'linien' ? '' : `
           // wandering cell lines on the open sea; they break up here and there like drawn strokes
           vec2 q = vWorld.xz / 46.0 + uTime * vec2(0.010, 0.006);
           // a smooth domain warp bends the straight Voronoi borders into rounded strokes
@@ -297,9 +439,14 @@ export class Ocean {
           // frozen lagoons: faceted ice, one shade per triangle-sized cell
           float iceShade = fract(sin(dot(floor(vWorld.xz / 9.0), vec2(12.9898, 78.233))) * 43758.5453);
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(uIce, uIceDark, step(0.6, iceShade)), step(0.5, gi.y));`)
+        // the woodcut is lit as one smooth surface: the grid's own facets (each triangle a shade lighter or darker by
+        // its tilt) showed through its flat bands
+        .replace('#include <normal_fragment_begin>', steps ? /* glsl */ `#include <normal_fragment_begin>
+          normal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);` : '#include <normal_fragment_begin>')
         .replace('#include <opaque_fragment>', /* glsl */ `#include <opaque_fragment>
           // fade into the far-sea colour the sky dome paints below the horizon
           float seaFog = smoothstep(uSeaFogNear, uSeaFogFar, length(vWorld - cameraPosition));
+          ${steps ? 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uGlint, glint * uGlintK);' : ''}
           gl_FragColor.rgb = mix(gl_FragColor.rgb, uSeaFar, seaFog);`);
     };
     mat.customProgramCacheKey = () => `lowpoly-ocean-${style}`;
@@ -322,6 +469,14 @@ export class Ocean {
     this.uniforms.uAmp.value = env.w.waves;
     this.uniforms.uStorm.value = THREE.MathUtils.clamp((env.w.waves - 1) / 2.1, 0, 1);
     this.uniforms.uSea.value = env.w.sea;
+    this.uniforms.uWind.value = env.w.wind;
+    if (env.w.wind > 0.01) this.uniforms.uWindDir.value.set(env.windX, env.windZ).normalize();
+    // the woodcut's light path: pale gold by day, a faint grey-blue moon path at night, only under a clear sky (under
+    // cloud it would glitter where no sun shines)
+    this.uniforms.uLightDir.value.copy(env.lightDir);
+    const day = env.sunVisible;
+    this.uniforms.uGlint.value.copy(GLINT_SUN).lerp(GLINT_MOON, 1 - day);
+    this.uniforms.uGlintK.value = THREE.MathUtils.smoothstep(env.w.sun, 0.55, 0.9) * (0.85 * day + 0.45 * (1 - day) * env.moonVisible);
     this.uniforms.uSunXZ.value.set(env.sunDir.x, env.sunDir.z);
     // the same far-sea colour the sky dome shows below the horizon (it mixes in the fog once more)
     this.uniforms.uSeaFar.value.copy(env.seaFar).lerp(env.horizon, env.fogAmount);
@@ -330,8 +485,8 @@ export class Ocean {
     this.uniforms.uSeaFogNear.value = Math.min(env.w.fogNear, this.uniforms.uSeaFogFar.value * 0.5);
     // follow the camera in whole cells so the wave pattern stays fixed in the world; the mosaic in pairs of cells,
     // so every quad keeps the diagonal it is split along (its facets would flip otherwise)
-    for (const m of [this.seas.mosaik, this.seas.linien]) {
-      const c = (m.userData.cell as number) * (m === this.seas.mosaik ? 2 : 1);
+    for (const k of STYLES) {
+      const m = this.seas[k], c = (m.userData.cell as number) * (k === 'mosaik' ? 2 : 1);
       m.position.set(Math.round(camera.position.x / c) * c, 0, Math.round(camera.position.z / c) * c);
     }
   }

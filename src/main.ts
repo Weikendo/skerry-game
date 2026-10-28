@@ -748,7 +748,7 @@ function settingsTabs(): SettingTab[] {
         flag('bloom', t('set.bloom')),
       ] },
       { title: t('set.sec.view'), items: [
-        choice('meer', t('gui.sea'), [['mosaik', t('set.seaMosaic')], ['linien', t('set.seaLines')]], (v) => ocean.setStyle(v as SeaStyle)),
+        choice('meer', t('gui.sea'), [['mosaik', t('set.seaMosaic')], ['linien', t('set.seaLines')], ['stufen', t('set.seaSteps')]], (v) => ocean.setStyle(v as SeaStyle)),
         choice('bildrate', t('gui.frameRate'), [['60', '60'], ['30', '30']]),
         flag('leistung', t('gui.perf')),
       ] },
