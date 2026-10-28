@@ -28,7 +28,9 @@ const STALL = 12;
  */
 /** what one unit's autopilot remembers */
 interface PilotState {
-  input: VirtualInput; stuck: number; orbiting: boolean; home: boolean; slowed: boolean; braking: boolean; clear: boolean;
+  input: VirtualInput; stuck: number; orbiting: boolean; home: boolean; slowed: boolean; braking: boolean;
+  /** caught on the carrier's hull: seconds it still backs off */
+  unstick: number;
   /** the Otter's way to its waypoint round cliffs and over a landing (null: straight), the waypoint it was planned for, how often it was planned again */
   route: P2[] | null; routeFor: { x: number; y: number } | null; replans: number;
   /** the same for the way home to the stern dock, the point off the stern it leads to, seconds since */
@@ -42,7 +44,7 @@ export class UnitPilots {
   private st(u: object): PilotState {
     let s = this.states.get(u);
     if (!s) {
-      s = { input: new VirtualInput(), stuck: 0, orbiting: false, home: false, slowed: false, braking: false, clear: false, route: null, routeFor: null, replans: 0, homeRoute: null, homeGoal: null, homeAge: 0, aim: null, best: Infinity, since: 0 };
+      s = { input: new VirtualInput(), stuck: 0, orbiting: false, home: false, slowed: false, braking: false, unstick: 0, route: null, routeFor: null, replans: 0, homeRoute: null, homeGoal: null, homeAge: 0, aim: null, best: Infinity, since: 0 };
       this.states.set(u, s);
     }
     return s;
@@ -82,8 +84,6 @@ export class UnitPilots {
 
   walrus(w: Walrus, dt: number): InputLike | null {
     const st = this.st(w);
-    // aboard again: its next trip starts at the stern dock (however it is launched: the console, L, a waypoint)
-    if (w.state === 'dock' || w.state === 'aussetzen') st.clear = false;
     if (st.braking) {
       if (w.state !== 'fahren' || Math.abs(w.speed) < 0.3) { st.braking = false; return null; }
       st.input.clear();
@@ -93,7 +93,7 @@ export class UnitPilots {
     if (st.home) return this.walrusDock(w, dt);
     const wp = w.waypoint;
     if (!wp) return null;
-    if (w.state === 'dock') { w.toggleLaunch(); st.clear = false; return null; }
+    if (w.state === 'dock') { w.toggleLaunch(); return null; }
     if (w.state !== 'fahren') return null;
     // round cliffs and over a landing's ramp, where the way leads onto, off or past an island with cliffs
     if (!st.routeFor || st.routeFor.x !== wp.x || st.routeFor.y !== wp.y) this.plan(w, st, wp.x, wp.y);
@@ -102,26 +102,24 @@ export class UnitPilots {
     const dist = Math.hypot(tx - w.pos.x, tz - w.pos.z);
     if (dist < 25 && (!st.route || st.route.length <= 1)) { w.waypoint = null; st.route = null; this.notify(t('pilot.waypointReached', { unit: w.name })); return null; }
 
-    // close to the carrier: drive round the hull instead of into it
+    // close to the carrier: drive round the hull instead of into it (out of the stern dock it comes nose first,
+    // facing away from the ship, and curves round in open water); caught on the hull, it backs off out- and
+    // astern for a moment, then tries again further out
     const c = this.carrier, l = c.worldToLocal(w.pos), g = c.worldToLocal(new THREE.Vector3(tx, 0, tz));
-    // just out of the stern dock with the target ahead: back off while turning the nose towards the ship's side,
-    // then drive past the hull (turning on the spot needs way on in the water, forward would run into the stern)
-    if (!st.clear && Math.abs(l.x) < 50 && l.z < -95 && l.z > -220 && g.z > l.z) {
-      const side = (l.x || g.x || 1) > 0 ? 1 : -1, p = c.localToWorld(side * 72, l.z + 50);
+    if (w.blocked && Math.abs(l.x) < 62 && l.z < c.model.stemZ + 16) st.unstick = 3;
+    if (st.unstick > 0) {
+      st.unstick -= dt;
+      const side = (l.x || g.x || 1) > 0 ? 1 : -1, p = c.localToWorld(side * 90, l.z - 40);
       const turn = wrap(Math.atan2(p.x - w.pos.x, p.z - w.pos.z) - w.heading);
-      // once pointing past the hull (or far enough back) it never backs again on this trip
-      if (Math.abs(turn) < 0.5 || l.z < -200) st.clear = true;
-      else {
-        st.input.clear();
-        st.input.set(KEYS.forward, -1);
-        st.input.set(KEYS.left, -turn * 2.5);   // going astern the rudder works the other way round
-        st.stuck = 0; st.aim = null;
-        return st.input;
-      }
+      st.input.clear();
+      st.input.set(KEYS.forward, -1);
+      st.input.set(KEYS.left, -turn * 2.5);   // going astern the rudder works the other way round
+      st.stuck = 0; st.aim = null;
+      return st.input;
     }
     if (Math.abs(l.x) < 62 && l.z > -200 && l.z < c.model.stemZ + 16 && Math.sign(g.z - l.z) > 0 && Math.abs(g.x) < 60 + Math.abs(g.z - l.z)) {
       const side = (l.x || g.x || 1) > 0 ? 1 : -1;
-      const p = c.localToWorld(side * 72, Math.min(l.z + 50, c.model.stemZ + 26));
+      const p = c.localToWorld(side * 76, Math.min(l.z + 50, c.model.stemZ + 26));
       tx = p.x; tz = p.z;
       st.aim = null;
     }

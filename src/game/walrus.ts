@@ -25,6 +25,8 @@ const DOCK_Z = -86;          // carrier-local z of the parked Walrus (dock spans
 const DOCK_BAYS = [20.25, 6.75, -6.75, -20.25];
 /** carrier-local z where a Walrus coming in is taken over: its bow just inside the portal, clear of the others */
 const DOCK_TAKE = -100 - 6.5;
+/** carrier-local z where it turns round before backing into its bay: far enough out that it sweeps nothing */
+const DOCK_TURN = -112;
 const LAUNCH_Z = -124;       // where the launch animation hands over control
 const DOCK_MAX_SPEED = 6.5;  // carrier speed limit for docking ("Langsam" is 6 m/s)
 const HALF_LEN = 8.5, HALF_WID = 4.3;
@@ -90,8 +92,8 @@ export class Walrus implements Target {
   private anim = 0;
   /** its own bay in the stern dock (carrier-local x) */
   readonly dockX: number;
-  /** where it was taken over coming in (carrier-local) */
-  private dockFrom = { x: 0, z: DOCK_TAKE };
+  /** where it was taken over coming in (carrier-local), and its heading then against the ship's */
+  private dockFrom = { x: 0, z: DOCK_TAKE, yaw: 0 };
   private pitch = 0;
   private roll = 0;
   private msgTimer = 0;
@@ -247,19 +249,22 @@ export class Walrus implements Target {
 
     if (this.state === 'dock') this.placeInDock(DOCK_Z);
     else if (this.state === 'aussetzen') {
-      // straight out of its own bay
+      // nose first straight out of its own bay, away from the ship: open water ahead
       this.anim = Math.min(1, this.anim + dt / 4);
       this.placeInDock(THREE.MathUtils.lerp(DOCK_Z, LAUNCH_Z, THREE.MathUtils.smoothstep(this.anim, 0, 1)));
       if (this.anim >= 1) {
         this.state = 'fahren';
-        this.speed = this.carrier.speed - 2; // still backing away from the carrier
+        this.speed = 2 - this.carrier.speed; // still drawing away from the carrier
       }
     } else if (this.state === 'andocken') {
-      // first across to its own bay just inside the portal, then straight in: it never runs over another
-      this.anim = Math.min(1, this.anim + dt / 3.5);
-      const x = THREE.MathUtils.lerp(this.dockFrom.x, this.dockX, THREE.MathUtils.smoothstep(this.anim, 0, 0.55));
-      const z = THREE.MathUtils.lerp(this.dockFrom.z, DOCK_Z, THREE.MathUtils.smoothstep(this.anim, 0.35, 1));
-      this.placeInDock(z, x);
+      // it came in nose first: back a little out of the portal, across in front of its own bay and round, then
+      // straight back into it (it never runs over another, and it parks facing the door)
+      this.anim = Math.min(1, this.anim + dt / 5);
+      const across = THREE.MathUtils.smoothstep(this.anim, 0, 0.55), back = THREE.MathUtils.smoothstep(this.anim, 0.5, 1);
+      const x = THREE.MathUtils.lerp(this.dockFrom.x, this.dockX, across);
+      const z = back > 0 ? THREE.MathUtils.lerp(DOCK_TURN, DOCK_Z, back) : THREE.MathUtils.lerp(this.dockFrom.z, DOCK_TURN, THREE.MathUtils.smoothstep(this.anim, 0, 0.3));
+      const round = this.dockFrom.yaw >= 0 ? Math.PI : -Math.PI;
+      this.placeInDock(z, x, THREE.MathUtils.lerp(this.dockFrom.yaw, round, across));
       if (this.anim >= 1) {
         this.state = 'dock'; this.speed = 0;
         // refuel and refit from the hold; the hangar repairs over time
@@ -291,12 +296,13 @@ export class Walrus implements Target {
     this.msgTimer = seconds;
   }
 
-  /** in the dock or on the way in or out: `localX` defaults to its own bay */
-  private placeInDock(localZ: number, localX = this.dockX) {
+  /** in the dock or on the way in or out: `localX` defaults to its own bay, `yaw` (against the ship's heading) to
+   *  facing aft, out of the door */
+  private placeInDock(localZ: number, localX = this.dockX, yaw = Math.PI) {
     const c = this.carrier;
     c.localToWorld(localX, localZ, this.pos);
-    this.heading = c.heading;
-    this.speed = c.speed;
+    this.heading = c.heading + yaw;
+    this.speed = c.speed * Math.cos(yaw);
     this.medium = 'wasser';
     this.slopeDeg = 0;
     this.updateForward();
@@ -309,7 +315,9 @@ export class Walrus implements Target {
     const out = THREE.MathUtils.smoothstep(-localZ, 100, 112);
     const g = this.model.group;
     g.position.set(docked.x, THREE.MathUtils.lerp(docked.y, wave, out), docked.z);
-    g.rotation.set(cg.rotation.x * (1 - out), this.heading, cg.rotation.z * (1 - out), 'YXZ');
+    // (the ship's pitch and roll, turned round with it when it faces aft)
+    const turned = Math.cos(yaw);
+    g.rotation.set(cg.rotation.x * turned * (1 - out), this.heading, cg.rotation.z * turned * (1 - out), 'YXZ');
   }
 
   private updateForward() {
@@ -421,7 +429,12 @@ export class Walrus implements Target {
         this.say(t('otter.shipTooFast', { max: num(DOCK_MAX_SPEED, 1) }));
         return true;
       }
-      if (l.z > DOCK_TAKE) { this.state = 'andocken'; this.anim = 0; this.dockFrom = { x: l.x, z: l.z }; this.say(t('otter.docking')); }
+      if (l.z > DOCK_TAKE) {
+        this.state = 'andocken'; this.anim = 0;
+        const yaw = this.heading - c.heading;
+        this.dockFrom = { x: l.x, z: l.z, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)) };
+        this.say(t('otter.docking'));
+      }
       return false;
     }
     // already inside the hull's outline (squeezed in at the dock corner): moving outwards is always allowed
