@@ -45,6 +45,8 @@ export interface Target {
   velocity?(out: THREE.Vector3): THREE.Vector3;
   /** apply damage; return true if this hit destroyed the target */
   hit(damage: number, at: THREE.Vector3): boolean;
+  /** a dummy of the combat training: hit only by hand, nothing aims at it by itself */
+  readonly dummy?: boolean;
 }
 
 interface Projectile {
@@ -142,6 +144,9 @@ const BOLT: Record<'avatar' | 'quasar' | 'kanone' | 'virus', { core: [number, nu
 };
 /** seconds between two puffs of a missile's smoke trail */
 const TRAIL_EVERY = 0.006;
+/** a Harbinger's trail (a thin one, it is a small missile) begins this far from the launcher (m), out of the way of
+ *  the Otter's driver */
+const HARBINGER_TRAIL = { from: 40, scale: 0.45 };
 /** a turret's bolt destroys a missile it passes this close to (m) */
 const INTERCEPT = 2;
 const TEAM_LASER: Record<Team, string> = { spieler: PAL.lichtBlau, feind: PAL.lichtRot, neutral: PAL.lichtWeiss };
@@ -153,6 +158,8 @@ export interface HitEvent { target: Target; team: Team; kind: WeaponKind; at: TH
 
 /** how fast a weapon's shot flies (m/s), for the lead marker */
 export function shotSpeed(kind: WeaponKind): number { return SPEC[kind].speed; }
+/** how far a shot flies before it is spent (m) */
+export function shotReach(kind: WeaponKind): number { return SPEC[kind].speed * SPEC[kind].life; }
 
 export class Combat {
   readonly targets: Target[] = [];
@@ -319,7 +326,7 @@ export class Combat {
   nearestEnemy(from: THREE.Vector3, team: Team, range: number, kind?: Target['kind']): Target | null {
     let best: Target | null = null, bd = range;
     for (const t of this.targets) {
-      if (!t.alive || t.team === team || t.team === 'neutral' || (kind && t.kind !== kind)) continue;
+      if (!t.alive || t.dummy || t.team === team || t.team === 'neutral' || (kind && t.kind !== kind)) continue;
       const dd = t.centre(this.tmp).distanceTo(from);
       if (dd < bd) { bd = dd; best = t; }
     }
@@ -376,11 +383,12 @@ export class Combat {
       }
       keep.push(s);
       this.effects.halo(s.pos, new THREE.Color(SPEC[s.kind].color).multiplyScalar(1.6), Math.min(SPEC[s.kind].glow, this.onScreen(s.pos, 0.16)));
-      if (MISSILES.includes(s.kind)) {
+      // (a Harbinger leaves the Otter's rear deck behind the driver: its trail begins clear of the vehicle)
+      if (MISSILES.includes(s.kind) && (s.kind !== 'harbinger' || s.flown > HARBINGER_TRAIL.from)) {
         // an unbroken trail: a puff every 2–3 m, spread along the way flown this step
         s.smokeAcc += dt;
         const n = Math.floor(s.smokeAcc / TRAIL_EVERY);
-        for (let i = 1; i <= n; i++) this.effects.trail(this.tmp.lerpVectors(prev, s.pos, i / n));
+        for (let i = 1; i <= n; i++) this.effects.trail(this.tmp.lerpVectors(prev, s.pos, i / n), s.kind === 'harbinger' ? HARBINGER_TRAIL.scale : 1);
         s.smokeAcc -= n * TRAIL_EVERY;
       }
     }

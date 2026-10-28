@@ -87,8 +87,8 @@ export async function importSave(file: File): Promise<SaveGame> {
 
 // ---- hand-over across a page reload (a different world needs a fresh start) ----
 // (`quiet`: the game goes on after a change of language, without the "loaded" note and its name in the old language;
-// `tutorial`: the new game starts with the guided first steps)
-type Boot = { kind: 'start'; difficulty?: Difficulty; tutorial?: boolean } | { kind: 'load'; save: SaveGame; quiet?: boolean };
+// `tutorial`: the new game starts with the guided first steps; `training`: the combat training)
+type Boot = { kind: 'start'; difficulty?: Difficulty; tutorial?: boolean } | { kind: 'load'; save: SaveGame; quiet?: boolean } | { kind: 'training' };
 const BOOT = 'cc-boot';
 
 export function requestBoot(boot: Boot) {

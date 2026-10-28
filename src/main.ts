@@ -38,7 +38,7 @@ import { BATTERY, Hammerheads, ObservationDrone } from './game/hammerhead';
 import { HAMMERHEAD } from './game/arsenal';
 import { ShipTop } from './game/shipTop';
 import { Wrecks } from './world/wrecks';
-import { CRUISE_STEPS, Walrus } from './game/walrus';
+import { CRUISE_STEPS, Walrus, type Obstacle } from './game/walrus';
 import { LIFT_SPEED, Manta, MANTA_KEYBOARD, MANTA_KEYS, MIN_SPEED, type Pad } from './game/manta';
 import { PAD_TOP } from './models/buildings';
 import { Drone, DRONE_PACES, DRONE_RANGE } from './game/drone';
@@ -49,7 +49,7 @@ import { WeatherSchedule } from './world/weatherSchedule';
 import { linkDistance, setRelays, SIGNAL_LOST, type Side } from './game/telemetry';
 import { Input, KEYS, type InputLike } from './game/input';
 import { PointerControl } from './game/pointer';
-import { Combat, shotSpeed, type Target } from './game/combat';
+import { Combat, shotReach, shotSpeed, type Target } from './game/combat';
 import { MapView, OWNER_NAMES, type EnemyView, type IslandAlarm, type MapActions, type MapCommand } from './ui/map';
 import { CameraSystem, type CamGroup } from './game/cameras';
 import { SoundEngine, type SoundLevels } from './audio/sound';
@@ -69,6 +69,8 @@ import { GOODS, type Good } from './game/stores';
 import { Menu, type SettingItem, type SettingTab } from './ui/menu';
 import { Intro } from './ui/intro';
 import { Tutorial } from './ui/tutorial';
+import { Training, type Shot } from './ui/training';
+import { findRange, TrainingRange } from './game/trainingRange';
 import { requestBoot, SAVE_VERSION, takeBoot, writeSave, type SaveGame } from './game/savegame';
 import { SHIP_NAME, GAME_TITLE, START_DATE, ENEMY_SHIP_NAME } from './game/names';
 import { EnemyCarrier } from './game/enemyCarrier';
@@ -162,13 +164,15 @@ const bases = world.islands.map((isl, i) => new IslandBase(isl, isl.owner, effec
 bases.forEach(b => b.register(combat));
 // vegetation only exists while an island is detailed (streamed in and out)
 const vegetation = new Map<Island, Vegetation>();
+/** spots the trees keep clear of besides the bases' buildings (the combat training's tanks) */
+const clearings: Obstacle[] = [];
 function dropVegetation(isl: Island) {
   const v = vegetation.get(isl);
   if (v) { scene.remove(v.group); v.group.traverse(o => (o as THREE.Mesh).geometry?.dispose()); vegetation.delete(isl); }
 }
 function plantVegetation(isl: Island) {
   const i = world.islands.indexOf(isl);
-  const v = new Vegetation(isl, 3 + i * 13, bases[i].obstacles);
+  const v = new Vegetation(isl, 3 + i * 13, [...bases[i].obstacles, ...clearings]);
   vegetation.set(isl, v);
   scene.add(v.group);
 }
@@ -803,7 +807,7 @@ const help = document.getElementById('help')!;
 /** an island changed: obstacles for the Walrus, trees cleared from the new sites, old cameras gone */
 function refreshIsland(k: number) {
   obstacles.length = 0;
-  obstacles.push(...bases.flatMap(b => b.obstacles));
+  obstacles.push(...bases.flatMap(b => b.obstacles), ...clearings);
   const isl = world.islands[k];
   if (vegetation.has(isl)) { dropVegetation(isl); plantVegetation(isl); }
   if (cams.remove(`insel-${isl.name}-`)) selectCam(DEFAULT_CAM[active]);
@@ -813,6 +817,7 @@ function useCargo() {
   const w = walrus, cargo = w.load.cargo;
   if (w.state !== 'fahren') { notify(t('cargo.launchFirst', { unit: w.name }), 'bad'); return; }
   if (!cargo) { notify(t('cargo.none', { unit: w.name }), 'bad'); return; }
+  if (cargo === 'harbinger') { notify(t('cargo.harbingerKey', { n: w.load.missiles })); return; }
   if (cargo === 'virus') {
     // fired at the opening of an enemy command centre (where the turret aims)
     const from = w.pos.clone().add(V(0, 6, 0));
@@ -1375,7 +1380,7 @@ function nextLoad(u: UnitId) {
       const o = OTTER_CARGO[(i + k) % OTTER_CARGO.length], next = otterFit(o.cargo, o.role);
       if (refit(st, walrusGoods(w.load), walrusGoods(next), names)) continue;   // not in the hold: the next one
       w.fit = next;
-      w.load = { ...w.load, cargo: next.cargo, role: next.role };
+      w.load = { ...w.load, cargo: next.cargo, role: next.role, missiles: next.missiles };
       showGear(w);
       notify(t('order.load', { unit: name, what: otterCargoName(next.cargo, next.role) }));
       return;
@@ -1729,6 +1734,38 @@ const tutorial = new Tutorial({
   blip: () => sound.blip('good'),
 });
 map.onCourse = (k) => tutorial.plotted(k);
+// ---------- the combat training (Hauptmenü → Kampftraining): dummies off a quiet island, no enemy, nothing saved ----------
+let inTraining = false;
+let range: TrainingRange | null = null;
+/** the foam round the target ship's hull, as round the real ones */
+let rangeRing: ReturnType<WakeField['addRing']> | null = null;
+const training = new Training({
+  carrier, walruses, mantas, input,
+  pointerLocked: () => pointer.locked,
+  active: () => active,
+  driving: () => (active === 'walrus' ? walrus : active === 'manta' ? manta : null),
+  turretInHand: () => turretInHand(),
+  observer: () => (!hammer.drone ? 'none' : hammer.watching ? 'ready' : 'climbing'),
+  obsInHand: () => obsInHand(),
+  targets: () => ({
+    ship: range ? range.ship.centre(new THREE.Vector3()) : carrier.pos.clone(),
+    shipUp: !range || range.ship.alive,
+    beach: range ? range.beach : carrier.pos.clone(),
+    island: range ? world.islands[range.spot.island].name : '',
+  }),
+  blip: () => sound.blip('good'),
+  restart: () => { leaving = true; requestBoot({ kind: 'training' }); reloadPage(`?seed=${worldSeed}&inseln=${worldCount}`); },
+  leave: () => { leaving = true; reloadPage(`?seed=${worldSeed}&inseln=${worldCount}`); },
+});
+/** what of the player's hit a dummy (null: something the training does not ask for) */
+function shotOf(e: { kind: string; source?: object }): Shot | null {
+  if (e.source === defence) return 'turret';
+  if (e.kind === 'hammerhead') return 'hammer';
+  if (e.kind === 'harbinger') return 'harbinger';
+  if (e.source instanceof Manta) return e.kind === 'rakete' ? 'skuaMissile' : e.kind === 'laser' ? 'skuaLaser' : null;
+  if (e.source instanceof Walrus && e.kind === 'laser') return 'otterLaser';
+  return null;
+}
 
 const crosshair = document.getElementById('crosshair')!;
 const lockBox = document.getElementById('lock')!;
@@ -1736,6 +1773,7 @@ const hitMark = document.getElementById('hitmark')!, leadMark = document.getElem
 const targetInfo = document.getElementById('tinfo')!, incoming = document.getElementById('incoming')!;
 combat.onHit = (e) => {
   if (e.team === 'spieler' && e.kind !== 'kanone' && e.target.team === 'feind') stats.hits++;
+  if (range && e.team === 'spieler' && range.isTarget(e.target)) { const s = shotOf(e); if (s) training.hit(s, e.killed); }
   if (e.team === 'spieler' && e.target === enemyShip && !e.killed) voice.say('traeger-treffer');
   // a hit of the unit in hand: the crosshair flashes (red when it destroyed the target)
   const mine = active === 'walrus' ? walrus : active === 'manta' ? manta : turretInHand() ? defence : obsInHand() ? hammer : null;
@@ -1787,7 +1825,19 @@ function fireHammer() {
 }
 hammer.onEvent = (e) => {
   if (e === 'launch') sound.observerLaunch(hammer.drone!.pos);
-  else if (e === 'drone') { sound.chute(hammer.drone!.pos); notify(t('observer.ready'), 'good'); }
+  else if (e === 'drone') {
+    sound.chute(hammer.drone!.pos);
+    voice.say('zielsonde-bereit');
+    // at the Stoorworm's controls the view switches to the pod's camera by itself (from the map as well); in an Otter,
+    // a Skua or the stores it waits for X
+    if (active === 'traeger' && !supply.open) {
+      if (map.open) map.toggle();
+      setDevCamera(false);
+      syncObserverCam();
+      selectCam(OBS_CAM);
+      notify(t('observer.ready'), 'good');
+    } else notify(t('observer.readyAway', { ship: SHIP_NAME }), 'good');
+  }
   else if (e === 'spent') notify(t('observer.spent'));
   else if (e === 'away') notify(t('hammer.away', { n: carrier.stores.hammerhead }));
 };
@@ -1829,6 +1879,14 @@ combat.onKill = ({ target, by }) => {
   }
   // a carrier's hull gave out: it goes down (and the game may end)
   if (target === enemyShip || target === carrier) { shipLost(target as CarrierController); return; }
+  // the training's target ship: it goes down the same way, and a new one drops anchor after it
+  if (range && target === range.ship) {
+    goingDown.set(range.ship, { next: 0, fires: false, splash: false, told: false });
+    effects.explosion(range.ship.centre(new THREE.Vector3()), 3, PAL.feind);
+    notify(t('train.shipSunk'), 'good');
+    voice.say('ziel-zerstoert');
+    return;
+  }
   if (target.kind === 'einheit') {
     const foe = target.team === 'feind';
     effects.explosion(target.centre(new THREE.Vector3()), 1.4, foe ? PAL.feind : PAL.ocker);
@@ -1899,6 +1957,15 @@ function updateAim() {
   aimTarget = hit.target && hit.target.team === 'feind' ? hit.target : combat.findTarget(camera.position, camDir, 'spieler', 2500, 1.5);
 }
 
+/** the target under the crosshair of the laser turret or the Otter lies beyond the laser's reach (the bolts are spent
+ *  before; the target is shown out to 2.5 km) */
+const farFrom = new THREE.Vector3(), farTo = new THREE.Vector3();
+function laserFar(): boolean {
+  if (!aimTarget?.alive) return false;
+  const from = turretInHand() ? defence.muzzle(farFrom) : active === 'walrus' && walrus.aimValid ? walrus.pos : null;
+  return !!from && aimTarget.centre(farTo).distanceTo(from) > shotReach('laser');
+}
+
 const ndc = new THREE.Vector3();
 /** put a marker on the screen where `p` is; false (and hidden) when it is behind the camera or off the picture */
 function mark(el: HTMLElement, p: THREE.Vector3): boolean {
@@ -1928,9 +1995,11 @@ function updateCrosshair() {
   // the laser's heat: yellow from 70 %, red with a note while it is locked out; finer in the aim mode
   const laser = active === 'manta' ? manta.laser : turret ? defence.laser : walrus.laser;
   // (through the observation drone: red with a note while the point is beyond its reach)
-  crosshair.classList.toggle('over', show && (obs ? !hammerAim.reach : laser.overheated));
+  // (red as well while the target under it lies beyond the laser's reach: the target line below says so)
+  const far = show && !obs && (turret || active === 'walrus') && laserFar();
+  crosshair.classList.toggle('over', show && (obs ? !hammerAim.reach : laser.overheated || far));
   crosshair.classList.toggle('hot', show && !obs && !laser.overheated && laser.heat > 0.7);
-  crosshair.dataset.over = t(obs ? 'hammer.farShort' : 'aim.overheated');
+  crosshair.dataset.over = obs ? t('hammer.farShort') : laser.overheated ? t('aim.overheated') : '';
   crosshair.classList.toggle('zoom', show && (active === 'walrus' || turret || obs) && cams.zoomLevel > 1.05);
   // the Otter's (or the ship's) turret is still coming round to the crosshair: it holds fire, the crosshair is pale
   crosshair.classList.toggle('turn', show && ((active === 'walrus' && walrus.aimValid && !walrus.onTarget) || (turret && !defence.onTarget)));
@@ -1939,7 +2008,9 @@ function updateCrosshair() {
   const target = !show ? null : active === 'walrus' || turret || obs ? aimTarget : manta.lock;
   if (target && target.alive) {
     targetInfo.style.display = active === 'walrus' || turret || obs ? 'block' : 'none';
-    targetInfo.firstElementChild!.textContent = `${target.name} · ${pct(target.hp / target.maxHp)}`;
+    targetInfo.firstElementChild!.textContent = `${target.name} · ${pct(target.hp / target.maxHp)}` +
+      (far ? ` · ${t('aim.outOfRange', { km: km(target.centre(farTo).distanceTo(muzzle)) })}` : '');
+    targetInfo.classList.toggle('far', far);
     (targetInfo.querySelector('b') as HTMLElement).style.width = `${Math.round(100 * target.hp / target.maxHp)}%`;
     if (turret) carrier.velocity(shooterV); else if (active === 'walrus') shooterV.set(0, 0, 0); else manta.velocity(shooterV);
     // (a Hammerhead needs no lead: its drone keeps it on the target)
@@ -2402,6 +2473,7 @@ function cargoHint(w: Walrus): string {
   if (!c) return t('cargo.hintNone');
   if (c === 'virus') return t('cargo.hintVirus');
   if (c === 'tank') return t('cargo.hintTank');
+  if (c === 'harbinger') return t('cargo.hintHarbinger', { n: w.load.missiles });
   const isl = w.medium === 'land' ? world.islandAt(w.pos.x, w.pos.z) : null;
   const free = isl && bases[world.islands.indexOf(isl)].team === 'neutral' && !bases[world.islands.indexOf(isl)].pending;
   return t('cargo.hintAccb', { role: ROLE_NAMES[w.load.role] }) + (free ? ` · ${t('cargo.hintDrop')}` : '');
@@ -2428,6 +2500,9 @@ function simulate(dt: number): number {
   const trigger = armed && input.down(...KEYS.fire);
   const fired = armed && input.hit(...KEYS.fire);
   const missile = armed && input.hit(...KEYS.missile);
+  const harb = armed && input.hit(...KEYS.harbinger);
+  // a shot at a target the laser does not reach: the computer says so
+  if (fired && laserFar()) voice.say('ausser-reichweite');
   // an Assassin without a lock: a double tick (the message says why)
   if (missile && active === 'manta' && manta.state === 'flug' && !manta.lock && manta.missiles > 0) {
     input.rumble(0.3, 0, 40);
@@ -2458,7 +2533,7 @@ function simulate(dt: number): number {
     drone.update(h, active === 'drohne' ? inp : null);
     for (const w of walruses) {
       const mine = w === walrus && active === 'walrus';
-      w.shoot(h, mine && trigger && !guiding, combat, mine && fired && i === 0);
+      w.shoot(h, mine && trigger && !guiding, combat, mine && fired && i === 0, mine && harb && i === 0);
     }
     for (const m of mantas) {
       const mine = m === manta && active === 'manta', f = strikes.fire(m);
@@ -2507,6 +2582,12 @@ function simulate(dt: number): number {
   depotRange();
   supply.update(dt);
   tutorial.update(dt);
+  training.update(dt);
+  if (range) {
+    const back = range.update(dt, env);
+    if (back.tanks) notify(t('train.raised'));
+    if (back.ship) { goingDown.delete(range.ship); notify(t('train.shipBack')); }
+  }
   updateWakes(simDt);
   playStats.time += dt;
   if (playStats.time - playStats.lastAuto > AUTOSAVE_EVERY) autosave();
@@ -2547,6 +2628,7 @@ function updateWakes(simDt: number) {
     otterCurls.get(w)!.update(w.pos, w.forward, Math.max(0, w.speed), env, afloat);
     if (afloat) spray.emit(w, simDt, w.pos, w.forward, Math.max(0, w.speed), OTTER_BOW, env);
   }
+  if (range && rangeRing) rangeRing.update(range.ship.pos, range.ship.forward, 0, now, range.ship.alive);
   spray.update(simDt, env);
   carrierWake.update(simDt, carrier.localToWorld(0, -100), carrier.forward, carrier.speed, true, env);
   enemyWake.update(simDt, enemyShip.localToWorld(0, -100), enemyShip.forward, enemyShip.speed, true, env);
@@ -2759,7 +2841,9 @@ function setDifficulty(d: Difficulty, fresh: boolean) {
 }
 
 /** a carrier's hull gave out: it burns and goes down; the enemy's vehicles out lose their ship */
-const goingDown = new Map<CarrierController, { next: number; fires: boolean; splash: boolean; told: boolean }>();
+/** what goes down: a carrier, or the training's target ship */
+type Sinking = Pick<CarrierController, 'sinking' | 'localToWorld' | 'centre'> & { model: { group: THREE.Object3D } };
+const goingDown = new Map<Sinking, { next: number; fires: boolean; splash: boolean; told: boolean }>();
 function shipLost(ship: CarrierController) {
   goingDown.set(ship, { next: 0, fires: false, splash: false, told: false });
   const p = ship.centre(new THREE.Vector3());
@@ -2908,7 +2992,7 @@ function applyState(save: SaveGame) {
 
 function autosave() {
   // the test range never overwrites the real game's autosave, a lost game neither
-  if (!started || PROBE || game.over === 'niederlage') return;
+  if (!started || PROBE || inTraining || game.over === 'niederlage') return;
   playStats.lastAuto = playStats.time;
   const why = writeSave('auto', makeSave(defaultSaveName()));
   if (why) notify(t('save.autoFailed', { why }), 'bad');
@@ -2933,10 +3017,36 @@ function startGame(fresh: boolean, difficulty: Difficulty = 'normal', withTutori
   if (fresh) { env.setWeather('regen', true, 6, undefined, 0.85); params.wetter = WEATHER_NAME.regen; weather.restart(); }
   // a new game starts late in the morning, so there is a day ahead before it gets dark (the title stays at 17:00)
   if (fresh) { carrier.throttle = 3; setVehicle('traeger'); playStats.time = playStats.lastAuto = 0; env.time = params.zeit = START_TIME; }
-  if (fresh || !enemyContact.last) radioIntel();
+  if ((fresh || !enemyContact.last) && !inTraining) radioIntel();
   menu.hide();
   sound.setPaused(false);
   clock.getDelta();
+}
+/**
+ * Hauptmenü → Kampftraining: a new game off a quiet island with the dummies (src/game/trainingRange.ts) and the card
+ * that leads through it (src/ui/training.ts); the enemy keeps still, the weather stays clear, nothing is saved
+ */
+function startTraining() {
+  inTraining = true;
+  startGame(true);
+  omega.setHold(true);
+  env.setWeather('klar', true); params.wetter = WEATHER_NAME.klar; weather.enabled = false;
+  const spot = findRange(world, bases, enemyShip.pos);
+  if (!spot) { notify(t('train.none'), 'bad'); return; }
+  range = new TrainingRange(spot, world, combat);
+  scene.add(range.group);
+  rangeRing = wakeField.addRing(foeShape.waterline(), 9);
+  clearings.push(...range.obstacles);
+  obstacles.push(...range.obstacles);
+  const isl = world.islands[spot.island];
+  if (vegetation.has(isl)) { dropVegetation(isl); plantVegetation(isl); }
+  const c = spot.carrier;
+  carrier.loadState({ ...carrier.saveState(), x: c.x, z: c.z, heading: c.heading, speed: 0, throttle: 1, waypoint: null });
+  // every Otter with a Harbinger launcher, every Skua with four Assassins
+  for (const w of walruses) { w.fit = otterFit('harbinger', 'rohstoff'); w.load = { ...w.fit }; showGear(w); }
+  for (const m of mantas) { m.fit = skuaFit('raketen'); m.load = { ...m.fit }; showGear(m); }
+  training.start();
+  notify(t('train.ready', { island: isl.name }), 'good');
 }
 function pause() {
   if (!started || menu.open) return;
@@ -2981,7 +3091,16 @@ const menu = new Menu({
     requestBoot({ kind: 'load', save });
     reloadInto(save.meta.seed, save.meta.count);
   },
-  save: (slot, name) => writeSave(slot, makeSave(name)),
+  save: (slot, name) => (inTraining ? t('train.noSave') : writeSave(slot, makeSave(name))),
+  training: () => inTraining,
+  // the training starts afresh in the same world (a running game is saved first)
+  startTraining: () => {
+    if (!started) { startTraining(); return; }
+    autosave();
+    leaving = true;
+    requestBoot({ kind: 'training' });
+    reloadPage(`?seed=${worldSeed}&inseln=${worldCount}`);
+  },
   settingsTabs,
   devPanel: (show) => { document.body.classList.toggle('menu-settings', show); if (show) gui.open(); },
   world: () => ({ seed: worldSeed, count: worldCount }),
@@ -2995,7 +3114,8 @@ const menu = new Menu({
   // the other language: remembered, then the page starts afresh in it; a running game is saved and goes straight on
   language: (l) => {
     setLang(l);
-    if (started && !PROBE && game.over !== 'niederlage') { autosave(); requestBoot({ kind: 'load', save: makeSave(defaultSaveName()), quiet: true }); }
+    if (inTraining) requestBoot({ kind: 'training' });
+    else if (started && !PROBE && game.over !== 'niederlage') { autosave(); requestBoot({ kind: 'load', save: makeSave(defaultSaveName()), quiet: true }); }
     leaving = true;
     reloadPage(PROBE ? location.search : `?seed=${worldSeed}&inseln=${worldCount}`);
   },
@@ -3015,6 +3135,16 @@ function startIntro() {
 addEventListener('blur', () => { if (params.hintergrundPause) pause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && params.hintergrundPause) pause(); });
 addEventListener('pagehide', () => { if (!leaving) autosave(); });
+// Enter catches the pointer for the camera and the aim, as the Trackpad button does (Esc lets it go). It is done in
+// the key's own event, which browsers count as a gesture (Esc does not), and it must not click a button that has
+// the focus (Hammerhead, say); in the menu and in text fields Enter stays theirs
+addEventListener('keydown', (e) => {
+  if ((e.code !== 'Enter' && e.code !== 'NumpadEnter') || !started || menu.open || intro.active) return;
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+  if (!pointer.locked && (map.open || supply.open)) return;
+  e.preventDefault();
+  if (pointer.locked) pointer.release(); else pointer.capture();
+});
 
 loadSettings();
 
@@ -3025,6 +3155,7 @@ loadSettings();
     startGame(false);
     if (!boot.quiet) notify(t('save.loaded', { name: boot.save.meta.name }), 'good');
   } else if (boot?.kind === 'start') startGame(true, boot.difficulty, boot.tutorial);
+  else if (boot?.kind === 'training') startTraining();
   else if (PROBE) {
     // the combat test range: straight into a fight off an enemy island, clear weather that stays
     startGame(true);
@@ -3090,6 +3221,7 @@ Object.assign(window, {
     scene, renderer, post, world, bases, carrier, walruses, mantas, fleet, setCurrent, useCargo, drone, pilots, survey, economy, transfer, supply, weather, input, combat, effects, map, vegetation, sound,
     menu, collectState, applyState, makeSave, pause, autosave, playStats, step, enemy, enemyShip, enemyContact,
     omega, foeOtters, foeSkuas, defence, foeDefence, decoys, foeDecoys, shields, foeShields, hammer, foeHammer, hammerAim, foeEconomy, foePilots, foeContacts, music, ocean, shipTops, pointer, wrecks, intro, startIntro, tutorial, strikes, voice, headlights,
+    training, trainingRange: () => range,
   },
 });
 console.info(`Welt ${worldSeed} mit ${world.islands.length} Inseln erzeugt in ${(performance.now() - t0).toFixed(0)} ms · ` +

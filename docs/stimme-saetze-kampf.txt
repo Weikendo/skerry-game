@@ -1,0 +1,11 @@
+Ziel außer Reichweite.
+
+Zielsonde bereit, Zielerfassung aktiv.
+
+Feindliche Zielsonde gestartet.
+
+Target out of range.
+
+Spotter pod ready, targeting active.
+
+Enemy spotter pod launched.

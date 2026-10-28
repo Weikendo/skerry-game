@@ -309,7 +309,7 @@ export class DefenceDrones {
       if ((m.kind === 'rakete' || m.kind === 'hammerhead') && !m.lure && m.vel.dot(this.v1.subVectors(s.pos, m.pos)) > 0) list.push({ p: m.pos.clone(), w: m.pos.distanceTo(s.pos) * 0.5, missile: true });
     }
     for (const tg of this.combat.targets) {
-      if (!tg.alive || tg.kind !== 'einheit' || tg.team === this.team || tg.team === 'neutral' || tg instanceof ShieldDrone) continue;
+      if (!tg.alive || tg.dummy || tg.kind !== 'einheit' || tg.team === this.team || tg.team === 'neutral' || tg instanceof ShieldDrone) continue;
       const c = tg.centre(new THREE.Vector3()), d = c.distanceTo(s.pos);
       if (d > SHIELD.reach) continue;
       if (this.ships.includes(tg)) { if (d < 1600) list.push({ p: c, w: d, missile: false }); continue; }

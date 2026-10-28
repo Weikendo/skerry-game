@@ -11,7 +11,8 @@ const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 const electronVersion = JSON.parse(readFileSync(path.join(root, 'node_modules/electron/package.json'), 'utf8')).version;
 const target = process.argv[2] ?? 'mac';
 const platforms = {
-  mac: { platform: 'darwin', arch: 'arm64,x64', icon: 'electron/icon.icns' },
+  // (Apple Silicon only: no Intel build is needed)
+  mac: { platform: 'darwin', arch: 'arm64', icon: 'electron/icon.icns' },
   win: { platform: 'win32', arch: 'x64', icon: 'electron/icon.ico' },
 };
 const t = platforms[target];

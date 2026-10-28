@@ -173,7 +173,7 @@ export class Omega {
     o.hammerhead = { priority: 1, target: 2 };
     o.beobachtungsdrohne = { priority: 1, target: 2 };
     // the vehicles' fitting: the Otter with an Avatar, the Skua with a Quasar and an Assassin under each wing
-    for (const w of foe.otters) { w.fit = { weapon: 'avatar', ammo: AVATAR_SHOTS, cargo: null, role: 'rohstoff' }; w.rearm(); }
+    for (const w of foe.otters) { w.fit = { weapon: 'avatar', ammo: AVATAR_SHOTS, cargo: null, missiles: 0, role: 'rohstoff' }; w.rearm(); }
     for (const m of foe.skuas) { m.fit = skuaFit(); m.rearm(); }
     foe.helm.home = () => {
       const k = foe.economy.stockpile;
@@ -477,7 +477,7 @@ export class Omega {
       if (p.kind === 'angriff' && base.team !== 'spieler') { this.end(); return; }
       if (!this.foe.helm.onStation || w.state !== 'dock') return;
       // fit the Otter for the job: the Avatar always, an ACCB for a conquest
-      w.fit = { weapon: 'avatar', ammo: AVATAR_SHOTS, cargo: p.kind === 'erobern' ? 'accb' : null, role: p.role };
+      w.fit = { weapon: 'avatar', ammo: AVATAR_SHOTS, cargo: p.kind === 'erobern' ? 'accb' : null, missiles: 0, role: p.role };
       w.rearm();
       if (p.kind === 'erobern' && w.load.cargo !== 'accb') { this.end(); return; }
       const cc = base.commandCentre;

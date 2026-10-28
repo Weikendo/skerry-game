@@ -16,7 +16,7 @@ Skerry ist ein Strategie- und Actionspiel auf hoher See, eine Hommage an **Carri
 ## Spielen
 
 - Läuft im Browser, direkt unter [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/) (am besten Chrome oder Edge auf Mac oder PC), und als Mac- oder Windows-App zum Selbstbauen.
-- Steuerung mit Maus und Tastatur, Trackpad oder Gamepad. Die Einführung beim ersten Spiel und das Menü → Anleitung erklären alles Weitere.
+- Steuerung mit Maus und Tastatur, Trackpad oder Gamepad. Die Einführung beim ersten Spiel, das Kampftraining im Hauptmenü und das Menü → Anleitung erklären alles Weitere.
 - Deutsch und Englisch, je nach Sprache des Systems; umschalten im Hauptmenü.
 
 ## Selbst bauen
@@ -27,7 +27,7 @@ Mit [Node.js](https://nodejs.org) 20 oder neuer:
 npm install
 npm run dev        # Entwicklungsserver auf http://127.0.0.1:5173
 npm run build      # Web-Version nach dist/
-npm run app:mac    # Mac-App nach release/ (app:win für Windows)
+npm run app:mac    # Mac-App für Apple Silicon nach release/ (app:win für Windows)
 ```
 
 ## Entstehung
@@ -62,7 +62,7 @@ Skerry is a strategy and action game on the high seas, a homage to **Carrier Com
 ### Playing
 
 - Runs in the browser, right at [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/) (Chrome or Edge on a Mac or PC recommended), and as a Mac or Windows app you can build yourself.
-- Mouse and keyboard, trackpad or gamepad. The tutorial in your first game and Menu → How to play explain the rest.
+- Mouse and keyboard, trackpad or gamepad. The tutorial in your first game, the combat training in the main menu and Menu → How to play explain the rest.
 - English and German, following the system language; switch in the main menu.
 
 ### Building
@@ -73,7 +73,7 @@ With [Node.js](https://nodejs.org) 20 or newer:
 npm install
 npm run dev        # development server at http://127.0.0.1:5173
 npm run build      # web version to dist/
-npm run app:mac    # Mac app to release/ (app:win for Windows)
+npm run app:mac    # Mac app for Apple Silicon to release/ (app:win for Windows)
 ```
 
 ### Credits

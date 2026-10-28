@@ -11,7 +11,7 @@ import { LaserWeapon } from './weapons';
 import { GOODS, VEHICLE_TANK } from './stores';
 import { linkDistance, SIGNAL_LOST, signalAt, type Side } from './telemetry';
 import {
-  AVATAR_SHOTS, emptyWalrusLoad, HP, LEAK_BELOW, normaliseOtter, otterFit, type WalrusLoad,
+  AVATAR_SHOTS, emptyWalrusLoad, HARBINGER_LOAD, HP, LEAK_BELOW, normaliseOtter, otterFit, type WalrusLoad,
 } from './arsenal';
 import type { Guided } from './combat';
 import { t, km, num, pct } from '../i18n';
@@ -19,6 +19,8 @@ import { t, km, num, pct } from '../i18n';
 export type WalrusState = 'dock' | 'aussetzen' | 'fahren' | 'andocken' | 'zerstoert';
 export interface Obstacle { x: number; z: number; r: number }
 
+/** where a Harbinger leaves the launcher on the rear deck (model coordinates, models/loadout.ts) */
+const HARBINGER_LAUNCHER = new THREE.Vector3(1.9, 5.8, -4.2);
 const DOCK_Z = -86;          // carrier-local z of the parked Walrus (dock spans -100 .. -74)
 /** carrier-local x of the four bays side by side in the dock (x ±27), one for each Walrus: 1 to 4 from left to right as
  *  seen from astern (+x is port); floating fenders part them (art/stoorworm/build_stoorworm.py) */
@@ -120,7 +122,13 @@ export class Walrus implements Target {
     const st = this.carrier.stores, f = this.fit, l = this.load, miss: string[] = [];
     // the Avatar is built in: aboard it charges up again
     l.weapon = 'avatar'; l.ammo = AVATAR_SHOTS;
-    if (f.cargo && !l.cargo) {
+    if (f.cargo === 'harbinger') {
+      // the Harbinger launcher on the rear deck is filled up again from the hold
+      if (l.cargo !== 'harbinger') { l.cargo = 'harbinger'; l.missiles = 0; }
+      const take = Math.min(HARBINGER_LOAD - l.missiles, st.harbinger);
+      st.harbinger -= take; l.missiles += take;
+      if (l.missiles < HARBINGER_LOAD) miss.push(`${GOODS.harbinger.short} ${l.missiles}/${HARBINGER_LOAD}`);
+    } else if (f.cargo && !l.cargo) {
       const g = f.cargo;
       if (st[g] > 0) { st[g]--; l.cargo = g; } else miss.push(GOODS[g].short);
     }
@@ -129,6 +137,20 @@ export class Walrus implements Target {
     this.fuel += fill / VEHICLE_TANK; st.treibstoffWalrus -= fill;
     if (this.fuel < 0.99) miss.push(t('gear.tankOnly', { pct: pct(this.fuel) }));
     return miss.join(', ');
+  }
+
+  /** a Harbinger from the launcher on the rear deck, towards the crosshair (high on the deck it may go down a
+   *  little; aimed by the turret alone level or climbing a little); then the player steers it */
+  private launchHarbinger(combat: Combat, aim: THREE.Vector3) {
+    const l = this.load;
+    if (l.cargo !== 'harbinger' || l.missiles <= 0) { this.say(t('otter.noHarbinger')); return; }
+    if (this.guided) { this.say(t('otter.harbingerFlying')); return; }
+    const from = this.model.group.localToWorld(HARBINGER_LAUNCHER.clone());
+    const dir = aim.clone().normalize();
+    dir.y = Math.max(dir.y, this.aimValid ? -0.03 : 0.04);
+    this.guided = combat.fire({ kind: 'harbinger', team: this.team, from, dir: dir.normalize(), source: this }) ?? null;
+    l.missiles--;
+    this.say(t('otter.harbingerAway', { n: l.missiles }), 2);
   }
 
   get stern(): THREE.Vector3 {
@@ -169,8 +191,8 @@ export class Walrus implements Target {
     return true;
   }
 
-  /** Space: the Avatar fires while held, a Harbinger leaves on the press (one in the air at a time) */
-  shoot(dt: number, trigger: boolean, combat: Combat, pressed = false) {
+  /** Space: the Avatar fires while held; `harbinger` (X): a Harbinger leaves the rear-deck launcher (one in the air at a time) */
+  shoot(dt: number, trigger: boolean, combat: Combat, pressed = false, harbinger = false) {
     if (this.guided?.done) this.guided = null;
     this.laser.update(dt);
     // turret follows the aim point (relative to the hull)
@@ -199,6 +221,7 @@ export class Walrus implements Target {
     const l = this.load;
     const muzzle = barrel.localToWorld(new THREE.Vector3(0, 0, 5.0));
     const dir = this.aimValid && Math.abs(d) < 0.25 ? this.aim.clone().sub(muzzle) : barrel.localToWorld(new THREE.Vector3(0, 0, 20)).sub(muzzle);
+    if (harbinger) this.launchHarbinger(combat, dir);
     if (l.weapon === 'harbinger') {
       if (!pressed) return;
       if (this.guided) { this.say(t('otter.harbingerFlying')); return; }

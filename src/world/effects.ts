@@ -302,12 +302,13 @@ export class Effects {
     this.add('smoke', p, new THREE.Vector3((r() - 0.5) * 2, 2 + r() * 2, (r() - 0.5) * 2), size * (0.8 + r() * 0.4), 2.2 + r(), SMOKE_DARK.clone().lerp(ASH, r() * 0.25), 1.6, ASH);
   }
 
-  /** a puff of a missile's smoke trail: pale, hanging in the air where it was left, the puffs overlapping into one line */
-  trail(p: THREE.Vector3) {
+  /** a puff of a missile's smoke trail: pale, hanging in the air where it was left, the puffs overlapping into one
+   *  line; `scale`: thinner for a small missile */
+  trail(p: THREE.Vector3, scale = 1) {
     // missile trails may fill half the pool at most, so fires and wrecks always have smoke
     if (this.nSmoke > MAX_SMOKE * 0.5) return;
     const r = this.rnd;
-    this.add('smoke', p, new THREE.Vector3((r() - 0.5) * 1.2, 0.4 + r() * 0.6, (r() - 0.5) * 1.2), 1.9 + r() * 0.4, 1.8 + r() * 0.8, SMOKE_LIGHT.clone().lerp(SMOKE_FADE, r() * 0.4), 1.0);
+    this.add('smoke', p, new THREE.Vector3((r() - 0.5) * 1.2, 0.4 + r() * 0.6, (r() - 0.5) * 1.2), (1.9 + r() * 0.4) * scale, 1.8 + r() * 0.8, SMOKE_LIGHT.clone().lerp(SMOKE_FADE, r() * 0.4), 1.0);
   }
 
   /** a burning ruin: flickering fire and a column of smoke */

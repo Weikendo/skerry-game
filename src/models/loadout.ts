@@ -21,8 +21,8 @@ function rocket(len: number, r: number, body: string, tip: string): LowPolyBuild
 
 /**
  * What a Walrus carries, visible on the model: the Avatar's twin barrels or a
- * Harbinger launcher on the turret, and the cargo (ACCB, virus bomb, fuel pod)
- * on the rear deck.
+ * Harbinger launcher on the turret, and the cargo (ACCB, virus bomb, fuel pod,
+ * Harbinger launcher) on the rear deck.
  */
 export function buildWalrusGear(model: WalrusModel): (load: WalrusLoad) => void {
   // Harbinger: a four-tube launcher in the barrel cradle (it elevates with the aim)
@@ -40,6 +40,26 @@ export function buildWalrusGear(model: WalrusModel): (load: WalrusLoad) => void 
     rockets.push(r);
   }
   model.parts.barrel.add(launcher);
+
+  // Harbinger as cargo: the same four tubes on a pedestal on the rear deck, raised a little
+  const deck = new THREE.Group();
+  const db = new LowPolyBuilder();
+  db.box([-0.6, 0, -0.9], [0.6, 0.35, 0.9], PAL.anthrazit);
+  db.box([-0.2, 0.35, -0.3], [0.2, 0.7, 0.3], PAL.metall);
+  deck.add(mesh(db));
+  const tubes = new THREE.Group();
+  tubes.add(mesh(lb));
+  const deckRockets: THREE.Object3D[] = [];
+  for (const [x, y] of [[-0.36, 0.22], [0.36, 0.22], [-0.36, -0.22], [0.36, -0.22]]) {
+    const r = mesh(rg);
+    r.position.set(x, y, 1.2);
+    tubes.add(r);
+    deckRockets.push(r);
+  }
+  tubes.position.set(0, 1.15, -0.6);
+  tubes.rotation.x = -0.15;
+  deck.add(tubes);
+  deck.position.set(1.9, 4.3, -6.6);
 
   // cargo on the rear deck
   const accb = buildAccb();
@@ -63,7 +83,7 @@ export function buildWalrusGear(model: WalrusModel): (load: WalrusLoad) => void 
   tb.box([-0.82, 0.85, 0.4], [0.82, 1.15, 0.6], PAL.anthrazit);
   const tank = mesh(tb);
   tank.position.set(1.9, 4.3, -6.6);
-  model.group.add(accb, virus, tank);
+  model.group.add(accb, virus, tank, deck);
 
   return (l: WalrusLoad) => {
     model.parts.recoil.visible = l.weapon === 'avatar';
@@ -72,6 +92,8 @@ export function buildWalrusGear(model: WalrusModel): (load: WalrusLoad) => void 
     accb.visible = l.cargo === 'accb';
     virus.visible = l.cargo === 'virus';
     tank.visible = l.cargo === 'tank';
+    deck.visible = l.cargo === 'harbinger';
+    deckRockets.forEach((r, i) => { r.visible = i < l.missiles; });
   };
 }
 

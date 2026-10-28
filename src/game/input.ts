@@ -225,6 +225,8 @@ export const KEYS = {
   right: ['KeyD', 'ArrowRight', 'Pad.LX+'],
   fire: ['Space', 'Pad.RT', 'Ptr.Fire'],
   missile: ['KeyX', 'Pad.LT', 'Ptr.Second'],
+  /** the Otter's Harbinger (its LT and second click zoom the camera) */
+  harbinger: ['KeyX', 'Pad.RB'],
   /** the speed step: the ship's gear, the Otter's cruise control, the Skua's thrust step, the drone's pace */
   faster: ['Pad.Up', 'Ptr.Faster'],
   slower: ['Pad.Down', 'Ptr.Slower'],

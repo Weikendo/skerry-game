@@ -50,12 +50,16 @@ export const QUAKER = { bounces: 4, radius: 26 };
 
 // ---- payload ----
 export type WalrusWeapon = 'avatar' | 'harbinger' | null;
-export type WalrusCargo = 'accb' | 'virus' | 'tank' | null;
+export type WalrusCargo = 'accb' | 'virus' | 'tank' | 'harbinger' | null;
+/** Harbingers in the launcher an Otter carries as cargo on its rear deck */
+export const HARBINGER_LOAD = 4;
 export interface WalrusLoad {
   weapon: WalrusWeapon;
-  /** shots left in the Avatar, missiles left in the Harbinger launcher */
+  /** shots left in the Avatar */
   ammo: number;
   cargo: WalrusCargo;
+  /** Harbingers left in the rear-deck launcher (cargo 'harbinger') */
+  missiles: number;
   /** what the ACCB will build (chosen in the hangar, as in the original) */
   role: Exclude<IslandRole, 'basis'>;
 }
@@ -69,16 +73,17 @@ export interface MantaLoad {
 
 
 export const WEAPON_NAMES: Record<Exclude<WalrusWeapon, null>, string> = { avatar: t('gear.avatar'), harbinger: t('gear.harbinger') };
-export const CARGO_NAMES: Record<Exclude<WalrusCargo, null>, string> = { accb: t('gear.accb'), virus: t('gear.virus'), tank: t('gear.tank') };
+export const CARGO_NAMES: Record<Exclude<WalrusCargo, null>, string> = { accb: t('gear.accb'), virus: t('gear.virus'), tank: t('gear.tank'), harbinger: t('gear.harbingerLoad') };
 export const CENTRE_NAMES: Record<Exclude<MantaCentre, null>, string> = { quasar: t('gear.quasar'), quaker: t('gear.quaker'), assassin3: t('gear.assassin3'), funk: t('gear.funk') };
 
-export const emptyWalrusLoad = (): WalrusLoad => ({ weapon: null, ammo: 0, cargo: null, role: 'rohstoff' });
+export const emptyWalrusLoad = (): WalrusLoad => ({ weapon: null, ammo: 0, cargo: null, missiles: 0, role: 'rohstoff' });
 export const emptyMantaLoad = (): MantaLoad => ({ left: 0, right: 0, centre: null });
 
 // ---- what the player picks: the cargo (the weapons are built in) ----
 type Role = Exclude<IslandRole, 'basis'>;
-/** the Otter with its built-in Avatar and the given cargo */
-export const otterFit = (cargo: WalrusCargo = null, role: Role = 'rohstoff'): WalrusLoad => ({ weapon: 'avatar', ammo: AVATAR_SHOTS, cargo, role });
+/** the Otter with its built-in Avatar and the given cargo (a Harbinger launcher comes full) */
+export const otterFit = (cargo: WalrusCargo = null, role: Role = 'rohstoff'): WalrusLoad =>
+  ({ weapon: 'avatar', ammo: AVATAR_SHOTS, cargo, missiles: cargo === 'harbinger' ? HARBINGER_LOAD : 0, role });
 /** what the player picks for a Skua: nothing, the Quaker bomb, or a second Assassin under each wing (the radio pod
  *  is the drone's now) */
 export type SkuaCargo = 'raketen' | 'quaker' | null;
@@ -89,7 +94,7 @@ export const skuaCargoOf = (fit: MantaLoad): SkuaCargo => fit.left > 1 || fit.ri
 /** the Otter's cargo choices in the order the card steps through them */
 export const OTTER_CARGO: { cargo: WalrusCargo; role: Role }[] = [
   { cargo: null, role: 'rohstoff' }, { cargo: 'accb', role: 'rohstoff' }, { cargo: 'accb', role: 'fabrik' }, { cargo: 'accb', role: 'verteidigung' },
-  { cargo: 'virus', role: 'rohstoff' }, { cargo: 'tank', role: 'rohstoff' },
+  { cargo: 'harbinger', role: 'rohstoff' }, { cargo: 'virus', role: 'rohstoff' }, { cargo: 'tank', role: 'rohstoff' },
 ];
 /** the Skua's cargo choices in the order the card steps through them (testers asked for four missiles) */
 export const SKUA_CARGO: SkuaCargo[] = [null, 'raketen', 'quaker'];
@@ -108,9 +113,14 @@ export function skuaCargoGoods(l: MantaLoad): Partial<Record<Good, number>> {
   if (l.centre === 'quaker') g.quaker = 1;
   return g;
 }
-/** saves from before the simple fitting: the Quasar and the Assassin rack are no cargo any more, the Harbinger is gone */
+/** saves from before the simple fitting: the Quasar and the Assassin rack are no cargo any more, the Harbinger is cargo now
+ *  (an old Harbinger weapon is gone) */
 export function normaliseOtter(l: WalrusLoad, fit: boolean): WalrusLoad {
-  return { ...l, weapon: 'avatar', ammo: fit ? AVATAR_SHOTS : l.weapon === 'avatar' ? l.ammo : 0 };
+  const harbinger = l.cargo === 'harbinger';
+  return {
+    ...l, weapon: 'avatar', ammo: fit ? AVATAR_SHOTS : l.weapon === 'avatar' ? l.ammo : 0,
+    missiles: !harbinger ? 0 : fit ? HARBINGER_LOAD : Math.min(HARBINGER_LOAD, l.missiles ?? 0),
+  };
 }
 export function normaliseSkua(l: MantaLoad, fit: boolean): MantaLoad {
   // (a radio pod from an older save is dropped: it is the drone's now)
@@ -126,6 +136,7 @@ export function walrusGoods(l: WalrusLoad): Partial<Record<Good, number>> {
   if (l.cargo === 'accb') g.accb = 1;
   if (l.cargo === 'virus') g.virus = 1;
   if (l.cargo === 'tank') g.tank = 1;
+  if (l.cargo === 'harbinger' && l.missiles > 0) g.harbinger = l.missiles;
   return g;
 }
 

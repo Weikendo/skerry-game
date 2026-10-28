@@ -18,7 +18,9 @@ export type VoiceLine =
   // the transfer drone and the supply network
   | 'transfer-start' | 'transfer-angedockt' | 'transfer-geliefert' | 'transfer-voll' | 'transfer-bereit' | 'transfer-abbruch'
   | 'transfer-unterwegs' | 'transfer-zu-weit' | 'transfer-nichts' | 'lager-in-reichweite' | 'lager-ausser-reichweite'
-  | 'netz-unterbrochen' | 'lager-verloren';
+  | 'netz-unterbrochen' | 'lager-verloren'
+  // weapons
+  | 'ausser-reichweite' | 'zielsonde-bereit';
 
 /** 1: goes before everything waiting; 3: dropped after a short wait */
 const PRIO: Record<VoiceLine, 1 | 2 | 3> = {
@@ -31,10 +33,11 @@ const PRIO: Record<VoiceLine, 1 | 2 | 3> = {
   'transfer-geliefert': 2, 'transfer-voll': 2, 'transfer-abbruch': 2, 'netz-unterbrochen': 2, 'lager-verloren': 2,
   'transfer-start': 3, 'transfer-angedockt': 3, 'transfer-bereit': 3, 'transfer-unterwegs': 3, 'transfer-zu-weit': 3,
   'transfer-nichts': 3, 'lager-in-reichweite': 3, 'lager-ausser-reichweite': 3,
+  'zielsonde-bereit': 2, 'ausser-reichweite': 3,
 };
 const LINES = Object.keys(PRIO) as VoiceLine[];
 /** s before the same line may come again (otherwise AGAIN_DEFAULT) */
-const AGAIN: Partial<Record<VoiceLine, number>> = { 'schiff-beschuss': 30, 'feind-skua': 25, 'traeger-treffer': 60, 'ziel-zerstoert': 8, 'laser-heiss': 20 };
+const AGAIN: Partial<Record<VoiceLine, number>> = { 'schiff-beschuss': 30, 'feind-skua': 25, 'traeger-treffer': 60, 'ziel-zerstoert': 8, 'laser-heiss': 20, 'ausser-reichweite': 8 };
 const AGAIN_DEFAULT = 15;
 /** s a line may wait in the queue, by its priority */
 const PATIENCE = { 1: 8, 2: 6, 3: 3 };
@@ -52,6 +55,8 @@ export class ShipVoice {
   enabled = true;
   private buffers = new Map<VoiceLine, AudioBuffer>();
   private loading = false;
+  /** all files fetched (a line without one is passed over instead of holding up the queue) */
+  private loaded = false;
   private queue: { line: VoiceLine; at: number }[] = [];
   private said = new Map<VoiceLine, number>();
   private quietUntil = 0;
@@ -82,7 +87,7 @@ export class ShipVoice {
     if (!this.enabled) { this.queue.length = 0; return; }
     if (now < this.quietUntil || !this.queue.length) return;
     const buf = this.buffers.get(this.queue[0].line);
-    if (!buf) return;
+    if (!buf) { if (this.loaded) this.queue.shift(); return; }
     this.queue.shift();
     this.quietUntil = now + this.sound.speak(buf) + GAP;
   }
@@ -94,5 +99,6 @@ export class ShipVoice {
       const buf = await this.sound.decode(url(id));
       if (buf) this.buffers.set(id, buf);
     }));
+    this.loaded = true;
   }
 }

@@ -31,7 +31,7 @@ Priorität 1 hat Vorrang vor allem anderen, Priorität 3 entfällt, wenn gerade 
 | `feind-traeger` | Feindlicher Träger gesichtet. | Enemy carrier sighted. | `enemy.sighted` | 2 |
 | `feind-traeger-weg` | Kontakt zum feindlichen Träger verloren. | Contact with the enemy carrier lost. | `enemy.lost` | 3 |
 | `feind-accb` | Der Feind setzt eine ACCB ab. | Enemy ACCB landing. | `foe.accb` | 2 |
-| `feind-beobachter` | Feindliche Beobachtungsdrohne gestartet. | Enemy observation drone launched. | `observer.foeUp` | 3 |
+| `feind-beobachter` | Feindliche Zielsonde gestartet. | Enemy spotter pod launched. | `observer.foeUp` | 3 |
 | `feind-insel` | Der Feind hat eine Insel eingenommen. | The enemy has taken an island. | `foe.islandTaken` | 2 |
 | `skua-verloren` | Skua verloren. | Skua lost. | `kill.unitLost` (Skua) | 2 |
 | `otter-verloren` | Otter verloren. | Otter lost. | `kill.unitLost` (Otter) | 2 |
@@ -84,7 +84,17 @@ Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-transfer.txt`, wieder e
 | `netz-unterbrochen` | Versorgungsnetz unterbrochen. | Supply network cut off. | `transfer.frozen`, und wenn das Netz einfriert (Basis verloren) | 2 |
 | `lager-verloren` | Lagerinsel verloren. | Stockpile island lost. | `economy.depotLost` | 2 |
 
-Zusammen 33 + 13 = 46 Sätze, also 92 Dateien.
+### Waffen (dritte Runde)
+
+Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-kampf.txt`, erst Deutsch, dann Englisch. Die Beobachtungsdrohne heißt jetzt Zielsonde (englisch „spotter pod“): Sie ist keine Drohne, sondern eine Kamera am Fallschirm. Deshalb ist auch `feind-beobachter` neu eingesprochen. Die drei Sätze kamen als eine Aufnahme je Sprache und sind wie die anderen an den Pausen geschnitten (die Kommapause in „Zielsonde bereit, Zielerfassung aktiv“ bleibt drin) und auf −20 LUFS angeglichen.
+
+| ID | Deutsch | English | Auslöser | Prio |
+|---|---|---|---|---|
+| `ausser-reichweite` | Ziel außer Reichweite. | Target out of range. | Feuer mit Laserturm oder Otter auf ein Ziel jenseits der Laserreichweite (1,56 km); frühestens alle 8 s | 3 |
+| `zielsonde-bereit` | Zielsonde bereit, Zielerfassung aktiv. | Spotter pod ready, targeting active. | die eigene Zielsonde hängt am Schirm; an der Stoorworm schaltet die Ansicht dann von selbst auf ihre Kamera (`observer.ready`) | 2 |
+| `feind-beobachter` (neu) | Feindliche Zielsonde gestartet. | Enemy spotter pod launched. | wie oben, nur der neue Name | 3 |
+
+Zusammen 33 + 13 + 2 = 48 Sätze, also 96 Dateien. Solange eine Datei fehlt, überspringt der Bordcomputer den Satz, statt die Schlange aufzuhalten.
 
 ## Im Spiel
 

@@ -181,7 +181,7 @@ export class PointDefence {
     if (!this.missile) {
       bd = Infinity;
       for (const t of combat.targets) {
-        if (!t.alive || t.kind !== 'einheit' || t.team === this.team || t.team === 'neutral' || this.ships.includes(t)) continue;
+        if (!t.alive || t.dummy || t.kind !== 'einheit' || t.team === this.team || t.team === 'neutral' || this.ships.includes(t)) continue;
         const c = t.centre(this.tp);
         const d = c.distanceTo(ship);
         if (d > TURRET.unitRange) continue;

@@ -28,6 +28,10 @@ export interface MenuActions {
   load(save: SaveGame): void;
   /** returns '' or why it failed */
   save(slot: SlotId, name: string): string;
+  /** the combat training runs (nothing is saved) */
+  training(): boolean;
+  /** Kampftraining: dummies off a quiet island, no enemy, nothing saved */
+  startTraining(): void;
   /** Menü → Einstellungen */
   settingsTabs(): SettingTab[];
   /** the developer's panel (time, weather, cameras, the world, test tools) beside the menu */
@@ -242,15 +246,16 @@ export class Menu {
     this.tagEl.textContent = inGame && page !== 'end' ? t('menu.pause') : '';
     let html = '';
     if (page === 'main') {
-      const auto = readSave('auto');
+      const auto = readSave('auto'), training = inGame && this.actions.training();
       html = inGame
-        ? `<button data-act="resume" class="big">${t('menu.resume')}</button>
-           <button data-act="page" data-slot="save">${t('menu.save')}</button>
-           <button data-act="page" data-slot="load">${t('menu.load')}</button>
+        ? `<button data-act="resume" class="big">${t('menu.resume')}</button>` +
+          (training ? '' : `<button data-act="page" data-slot="save">${t('menu.save')}</button>`) +
+          `<button data-act="page" data-slot="load">${t('menu.load')}</button>
            <button data-act="page" data-slot="new">${t('menu.newGame')}</button>`
         : (auto ? `<button data-act="continue" class="big">${t('menu.resume')}<small>${esc(auto.meta.name)} · ${formatDate(auto.meta.savedAt)}</small></button>` : '') +
           `<button data-act="page" data-slot="new"${auto ? '' : ' class="big"'}>${t('menu.newGame')}</button>
            <button data-act="page" data-slot="load">${t('menu.loadGame')}</button>`;
+      if (!training) html += `<button data-act="training">${t('menu.training')}<small>${t('menu.trainingSub')}</small></button>`;
       html += `<button data-act="page" data-slot="settings">${t('menu.settings')}</button>
                <button data-act="page" data-slot="guide">${t('menu.guide')}</button>
                <button data-act="page" data-slot="help">${t('menu.controls')}</button>`;
@@ -381,6 +386,7 @@ export class Menu {
     if (act === 'title') { this.actions.toTitle(); return; }
     if (act === 'quit') { this.actions.quit?.(); return; }
     if (act === 'intro') { this.actions.intro(); return; }
+    if (act === 'training') { this.actions.startTraining(); return; }
     if (act === 'lang') { this.actions.language(OTHER_LANG); return; }
     if (act === 'resume') { this.actions.resume(); return; }
     if (act === 'continue') { const s = readSave('auto'); if (s) this.actions.load(s); return; }

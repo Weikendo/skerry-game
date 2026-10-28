@@ -3,7 +3,7 @@ import type { CarrierController } from '../game/carrierController';
 import type { Walrus } from '../game/walrus';
 import type { Manta } from '../game/manta';
 import type { Drone } from '../game/drone';
-import { AVATAR_SHOTS, skuaCargoOf } from '../game/arsenal';
+import { AVATAR_SHOTS, HARBINGER_LOAD, skuaCargoOf } from '../game/arsenal';
 import { SHIP_NAME } from '../game/names';
 import { bearing, kindOf, slopeClass, type UnitId } from './hud';
 import { FleetStatus, ICON, KMH, KN, meterColour, pad3, picto, TopBar, UNIT_COLORS, type StatusInfo } from './fleetStatus';
@@ -266,13 +266,14 @@ export class Deck {
       lines.push(`${t('hud.onLand')} · ${t('hud.slope', { deg: num(w.slopeDeg) })} <span style="color:${cls.color}">■ ${cls.name}</span>`);
     }
     // (the ammunition and the heat are meters)
+    if (w.guided) lines.push(`<b style="color:#f2c46a">${t('hud.harbingerFlying', { m: Math.round(w.guided.travelled) })}</b>`);
     if (l.weapon === 'avatar' && w.laser.overheated) lines.push(warn(t('hud.overheated')));
-    else if (l.weapon === 'harbinger' && w.guided) lines.push(`<b style="color:#f2c46a">${t('hud.harbingerFlying', { m: Math.round(w.guided.travelled) })}</b>`);
     else if (!l.weapon) lines.push(t('hud.unarmed'));
     lines.push(this.freight(u, `${l.cargo}:${l.role}`, cargo));
     const gauges = [this.gauge(t('deck.g.fuel'), w.fuel, undefined, undefined, `${t('stat.fuel')} ${pct(w.fuel)}`), this.armour(w)];
     if (l.weapon === 'avatar') gauges.push(this.gauge(t('deck.g.ammo'), l.ammo / AVATAR_SHOTS, CYAN, String(l.ammo)), this.heat(w.laser.heat, w.laser.overheated));
     else if (l.weapon === 'harbinger') gauges.push(this.gauge(t('deck.g.ammo'), l.ammo / Math.max(1, w.fit.ammo), CYAN, String(l.ammo)));
+    if (l.cargo === 'harbinger') gauges.push(this.gauge(t('deck.g.harbinger'), l.missiles / HARBINGER_LOAD, '#f2c46a', String(l.missiles)));
     if (out) gauges.push(this.radio(w.signal));
     const speed = !out ? '–' : w.medium === 'land' ? `${num(Math.abs(w.speed) * KMH)} km/h` : `${num(Math.abs(w.speed) * KN, 1)} kn`;
     return { lines, gauges, speed };
