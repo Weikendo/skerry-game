@@ -11,6 +11,9 @@ export const PAL = {
   wasserMarine: '#0a2b4d', wasserPetrol: '#155f80', wasserTeal: '#2a9294', wasserTuerkis: '#72c9b6', wasserGlanz: '#a8dcd8',
   // das Stufen-Meer (Farbholzschnitt), vom Wellental bis zum Kamm: Nordatlantik, Marine bis Stahlblau ohne Türkis, dunkel
   stufenTal: '#091a2c', stufenMitte: '#14314c', stufenFlanke: '#25506d', stufenKamm: '#5f8aa3',
+  // sein Flachwasser in drei Tiefen (bis 3 m, bis 10 m, bis zur offenen See): gedämpftes Meergrün bis Stahlblau statt
+  // des Türkis der Südsee, das am dunklen Atlantik leuchtete
+  stufenFlach: '#5f9e98', stufenUfer: '#2f6f80', stufenSchelf: '#1a4660',
   // die Sturmsee der Stufen nach Fotos des Nordatlantiks: schiefergrau, entsättigt, vom Tal bis zur hellen Flanke
   // (das Sturmlicht gibt noch Blau dazu)
   wasserSturmTal: '#262c34', wasserSturmKamm: '#7f858c',
@@ -56,7 +59,7 @@ export type PalName = keyof typeof PAL;
 
 /** Families for the palette sheet (viewer/palette.html). */
 export const PAL_FAMILIES: Record<string, PalName[]> = {
-  Wasser: ['wasserFlach', 'wasserMittel', 'wasserTief', 'wasserSturm', 'gischt', 'gischtSturm', 'wasserMarine', 'wasserPetrol', 'wasserTeal', 'wasserTuerkis', 'wasserGlanz', 'stufenTal', 'stufenMitte', 'stufenFlanke', 'stufenKamm', 'wasserSturmTal', 'wasserSturmKamm'],
+  Wasser: ['wasserFlach', 'wasserMittel', 'wasserTief', 'wasserSturm', 'gischt', 'gischtSturm', 'wasserMarine', 'wasserPetrol', 'wasserTeal', 'wasserTuerkis', 'wasserGlanz', 'stufenTal', 'stufenMitte', 'stufenFlanke', 'stufenKamm', 'stufenFlach', 'stufenUfer', 'stufenSchelf', 'wasserSturmTal', 'wasserSturmKamm'],
   'Sand & Erde': ['sandHell', 'sandNass', 'erde'],
   'Grün': ['gruen1', 'gruen2', 'gruen3', 'gruen4', 'gruen5'],
   Fels: ['fels1', 'fels2', 'fels3', 'fels4'],

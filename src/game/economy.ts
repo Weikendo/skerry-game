@@ -2,7 +2,7 @@ import type { Archipelago } from '../world/archipelago';
 import type { IslandBase } from '../world/base';
 import type { Team } from './combat';
 import type { Island } from '../world/island';
-import { FUEL_TARGET, GOOD_LIST, GOODS, emptyStores, type Good, type Stores } from './stores';
+import { CARRIER_TANK, FUEL_TARGET, GOOD_LIST, GOODS, emptyStores, type Good, type Stores } from './stores';
 import { t } from '../i18n';
 
 /** 0 low, 1 medium, 2 high (original priority values) */
@@ -18,7 +18,9 @@ const MINE_BASE = 100;           // per 4 s, flat
 const PACKET = 200;              // raw material packets of resource islands
 const MOVE_PACKET = 250;         // stockpile moves
 const MATERIAL_ORDER = { steps: 1, rawPerStep: 100, yields: 255 };
-const WEIGHTS = [1, 3, 6];       // lottery weights of the three priority lists
+const WEIGHTS = [1, 3, 6];       // lottery weights of the three priority lists (per list, not per order)
+/** the carrier's tank under this share: its fuel goes first (it could lie empty for minutes beside its stockpile) */
+const TANK_LOW = 0.1;
 const MAX_STOCK = 999;           // per good on the stockpile
 const RIGS = new Set(['funkmast', 'lagerhalle', 'tanklager']);
 const FACTORIES = new Set(['hangar', 'fabrik']);
@@ -63,8 +65,10 @@ export interface ShipmentView {
 /**
  * An island network (the player's, or the enemy's by the same rules), as in the original: every 4 s islands mine
  * into their own store, resource islands send raw material in packets to base
- * and factory islands, free factory places draw orders by lottery (priorities
- * weigh 1 : 3 : 6) and work them step by step from their island's store.
+ * and factory islands, free factory places draw orders by lottery (the priorities
+ * weigh 1 : 3 : 6, then the orders of the one drawn take turns) and work them step
+ * by step from their island's store. With the carrier's tank nearly empty its fuel
+ * goes first.
  * Shipments hop island by island along the shortest own route, waiting a
  * link's length at every island. Islands without a route to the base get no
  * orders and no deliveries; without the base nothing new is ordered.
@@ -84,7 +88,10 @@ export class Economy {
   stats = { rawRate: 0, rawTotal: 0, factories: 0, busy: 0, roles: { rohstoff: 0, fabrik: 0, verteidigung: 0, basis: 0 }, cut: 0, material: 0 };
   onMessage: ((msg: string, cls?: string) => void) | null = null;
   /** for the ship computer's voice: the network froze (no base left), the stockpile island fell */
-  onEvent: ((e: 'frozen' | 'depotLost') => void) | null = null;
+  onEvent: ((e: 'frozen' | 'depotLost' | 'fuelFirst') => void) | null = null;
+  /** the carrier's tank, 0..1 (set by the game; its fuel goes first when it is nearly empty) */
+  shipFuel: () => number = () => 1;
+  private fuelFirst = false;
   time = 0;
   private acc = 0;
   private second = 0;
@@ -338,9 +345,17 @@ export class Economy {
     this.jobs = keep;
   }
 
-  /** free factory places draw orders: three lists (low, medium, high) weighted 1 : 3 : 6 */
+  /**
+   * Free factory places draw orders: one of the three lists (low, medium, high) by lot, weighted 1 : 3 : 6, then its
+   * orders in turn. (Weighted per order, one high order lost against a handful of medium ones: the carrier's fuel at
+   * high was drawn about once in five.) With the carrier's tank nearly empty, every free place takes its fuel first
+   * until a tankful is in stock, on the way or in the works.
+   */
   private assign() {
     if (this.frozen) return;
+    const urgent = this.shipFuel() < TANK_LOW && this.have('treibstoffTraeger') < CARRIER_TANK;
+    if (urgent && !this.fuelFirst) this.onEvent?.('fuelFirst');
+    this.fuelFirst = urgent;
     const islands = this.world.islands, n = islands.length;
     const lists: JobKind[][] = [[], [], []];
     for (const g of GOOD_LIST) {
@@ -360,8 +375,12 @@ export class Economy {
     for (let k = 0; k < n; k++) {
       if (!this.linked[k]) continue;
       let free = this.places(k) - this.jobs.filter(j => j.island === k).length;
+      while (free > 0 && urgent && this.have('treibstoffTraeger') < CARRIER_TANK) {
+        this.jobs.push({ island: k, what: { kind: 'good', good: 'treibstoffTraeger' }, stage: 'setup', stepsLeft: GOODS.treibstoffTraeger.steps });
+        free--;
+      }
       while (free > 0) {
-        const w = lists.map((l, p) => l.length * WEIGHTS[p]), total = w[0] + w[1] + w[2];
+        const w = lists.map((l, p) => (l.length ? WEIGHTS[p] : 0)), total = w[0] + w[1] + w[2];
         if (!total) return;
         let r = Math.random() * total, p = 0;
         while (r >= w[p]) { r -= w[p]; p++; }

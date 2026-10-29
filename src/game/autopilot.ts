@@ -55,6 +55,8 @@ export class UnitPilots {
 
   /** `routes`: ways for Otters round cliff coasts and over landings (without: always straight) */
   constructor(private carrier: CarrierController, private notify: (msg: string) => void, private routes: OtterRoutes | null = null) {}
+  /** an Otter's autopilot has brought it to its waypoint (the ship computer says so) */
+  onArrived: (w: Walrus) => void = () => {};
 
   /** the player steers the Walrus by hand */
   walrusManual(input: InputLike): boolean {
@@ -119,7 +121,7 @@ export class UnitPilots {
     const leg = this.leg(w, st.route);
     let tx = leg?.x ?? wp.x, tz = leg?.z ?? wp.y;
     const dist = Math.hypot(tx - w.pos.x, tz - w.pos.z);
-    if (dist < 25 && (!st.route || st.route.length <= 1)) { w.waypoint = null; st.route = null; this.notify(t('pilot.waypointReached', { unit: w.name })); return null; }
+    if (dist < 25 && (!st.route || st.route.length <= 1)) { w.waypoint = null; st.route = null; this.notify(t('pilot.waypointReached', { unit: w.name })); this.onArrived(w); return null; }
 
     // close to the carrier: drive round the hull instead of into it (out of the stern dock it comes nose first,
     // facing away from the ship, and curves round in open water); caught on the hull, it backs off out- and

@@ -74,7 +74,7 @@ Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-transfer.txt`, wieder e
 | `transfer-angedockt` | Transferdrohne angedockt. | Transfer drone docked. | neu: sie legt am Bug an | 3 |
 | `transfer-geliefert` | Nachschub an Bord. | Supplies on board. | `transfer.delivered` | 2 |
 | `transfer-voll` | Laderaum voll, der Rest geht zurück. | Hold full, the rest goes back. | neu: beim Entladen passt nicht alles in den Laderaum | 2 |
-| `transfer-bereit` | Transferdrohne wieder bereit. | Transfer drone ready again. | neu: zurück an der Lagerinsel | 3 |
+| ~~`transfer-bereit`~~ | ~~Transferdrohne wieder bereit.~~ | ~~Transfer drone ready again.~~ | am 29.10.2026 entfernt: eine Meldung zu viel | – |
 | `transfer-abbruch` | Transfer abgebrochen. | Transfer aborted. | `transfer.aborted` (Schiff zu weit weg oder von Hand) | 2 |
 | `transfer-unterwegs` | Transferdrohne ist bereits unterwegs. | Transfer drone already under way. | `transfer.busy` (Start von Hand abgelehnt) | 3 |
 | `transfer-zu-weit` | Zu weit von der Lagerinsel entfernt. | Too far from the stockpile island. | `transfer.tooFar` (Start von Hand abgelehnt) | 3 |
@@ -94,7 +94,19 @@ Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-kampf.txt`, erst Deutsc
 | `zielsonde-bereit` | Zielsonde bereit, Zielerfassung aktiv. | Spotter pod ready, targeting active. | die eigene Zielsonde hängt am Schirm; an der Stoorworm schaltet die Ansicht dann von selbst auf ihre Kamera (`observer.ready`) | 2 |
 | `feind-beobachter` (neu) | Feindliche Zielsonde gestartet. | Enemy spotter pod launched. | wie oben, nur der neue Name | 3 |
 
-Zusammen 33 + 13 + 2 = 48 Sätze, also 96 Dateien. Solange eine Datei fehlt, überspringt der Bordcomputer den Satz, statt die Schlange aufzuhalten.
+### Otter und der Treibstoff der Stoorworm (vierte Runde, 29.10.2026)
+
+Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-otter.txt`, erst Deutsch, dann Englisch. Die Auslöser sind schon eingebaut; bis die Aufnahmen da sind, überspringt der Bordcomputer die drei Sätze. Gewünscht vom Spieler: Bisher sagte die Stimme zu den Ottern nur „Otter verloren.“, und für das Schiff selbst warnte sie nie vor knappem Treibstoff (nur für das Fahrzeug in der Hand).
+
+| ID | Deutsch | English | Auslöser | Prio |
+|---|---|---|---|---|
+| `otter-wegpunkt` | Otter am Wegpunkt. | Otter at waypoint. | der Autopilot eines Otters kommt an (`pilot.waypointReached`) | 3 |
+| `otter-an-land` | Otter an Land. | Otter ashore. | ein eigener Otter fährt vom Wasser auf eine Insel; frühestens alle 20 s | 3 |
+| `treibstoff-schiff` | Treibstoff der Stoorworm knapp. | Stoorworm fuel low. | Treibstoff der Stoorworm unter 20 % (wieder scharf ab 30 %) | 2 |
+
+`transfer-bereit` („Transferdrohne wieder bereit.“) ist am selben Tag entfallen.
+
+Zusammen 33 + 13 + 2 + 3 − 1 = 50 Sätze, also 100 Dateien. Solange eine Datei fehlt, überspringt der Bordcomputer den Satz, statt die Schlange aufzuhalten.
 
 ## Im Spiel
 

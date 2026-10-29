@@ -2,7 +2,7 @@ import { lang } from '../i18n';
 import type { SoundEngine } from './sound';
 
 /**
- * The Stoorworm's ship computer speaks (docs/bordcomputer-stimme.md): 46 short lines, recorded with ElevenLabs in
+ * The Stoorworm's ship computer speaks (docs/bordcomputer-stimme.md): 50 short lines, recorded with ElevenLabs in
  * German and English (src/assets/stimme), on the game's events. The log keeps its messages; the voice adds to them
  * and names no islands or distances. One line at a time: they wait in a short queue, warnings first, the unimportant
  * ones dropped when they had to wait; the same line not again for a while.
@@ -16,11 +16,13 @@ export type VoiceLine =
   | 'insel-erobert' | 'traeger-treffer' | 'traeger-sinkt' | 'bereit' | 'angriff-start' | 'angriff-heim' | 'reparatur'
   | 'kartiert'
   // the transfer drone and the supply network
-  | 'transfer-start' | 'transfer-angedockt' | 'transfer-geliefert' | 'transfer-voll' | 'transfer-bereit' | 'transfer-abbruch'
+  | 'transfer-start' | 'transfer-angedockt' | 'transfer-geliefert' | 'transfer-voll' | 'transfer-abbruch'
   | 'transfer-unterwegs' | 'transfer-zu-weit' | 'transfer-nichts' | 'lager-in-reichweite' | 'lager-ausser-reichweite'
   | 'netz-unterbrochen' | 'lager-verloren'
   // weapons
-  | 'ausser-reichweite' | 'zielsonde-bereit';
+  | 'ausser-reichweite' | 'zielsonde-bereit'
+  // the Otters and the ship's own fuel
+  | 'otter-wegpunkt' | 'otter-an-land' | 'treibstoff-schiff';
 
 /** 1: goes before everything waiting; 3: dropped after a short wait */
 const PRIO: Record<VoiceLine, 1 | 2 | 3> = {
@@ -31,13 +33,14 @@ const PRIO: Record<VoiceLine, 1 | 2 | 3> = {
   'feind-traeger-weg': 3, 'feind-beobachter': 3, 'funk-schwach': 3, 'treibstoff': 3, 'panzerung': 3, 'laser-heiss': 3,
   'ziel-zerstoert': 3, 'traeger-treffer': 3, 'angriff-start': 3, 'angriff-heim': 3, 'reparatur': 3, 'kartiert': 3,
   'transfer-geliefert': 2, 'transfer-voll': 2, 'transfer-abbruch': 2, 'netz-unterbrochen': 2, 'lager-verloren': 2,
-  'transfer-start': 3, 'transfer-angedockt': 3, 'transfer-bereit': 3, 'transfer-unterwegs': 3, 'transfer-zu-weit': 3,
+  'transfer-start': 3, 'transfer-angedockt': 3, 'transfer-unterwegs': 3, 'transfer-zu-weit': 3,
   'transfer-nichts': 3, 'lager-in-reichweite': 3, 'lager-ausser-reichweite': 3,
   'zielsonde-bereit': 2, 'ausser-reichweite': 3,
+  'treibstoff-schiff': 2, 'otter-wegpunkt': 3, 'otter-an-land': 3,
 };
 const LINES = Object.keys(PRIO) as VoiceLine[];
 /** s before the same line may come again (otherwise AGAIN_DEFAULT) */
-const AGAIN: Partial<Record<VoiceLine, number>> = { 'schiff-beschuss': 30, 'feind-skua': 25, 'traeger-treffer': 60, 'ziel-zerstoert': 8, 'laser-heiss': 20, 'ausser-reichweite': 8 };
+const AGAIN: Partial<Record<VoiceLine, number>> = { 'schiff-beschuss': 30, 'feind-skua': 25, 'traeger-treffer': 60, 'ziel-zerstoert': 8, 'laser-heiss': 20, 'ausser-reichweite': 8, 'otter-an-land': 20 };
 const AGAIN_DEFAULT = 15;
 /** s a line may wait in the queue, by its priority */
 const PATIENCE = { 1: 8, 2: 6, 3: 3 };

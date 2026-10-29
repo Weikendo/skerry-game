@@ -360,6 +360,7 @@ setRelays(() => (drone.relay ? [drone.pos] : []));
 // map waypoints for Walrus and Manta (the drone flies its own); Otters find their way round cliffs and over landings
 const otterRoutes = new OtterRoutes(world, obstacles);
 const pilots = new UnitPilots(carrier, (msg) => notify(msg), otterRoutes);
+pilots.onArrived = () => voice.say('otter-wegpunkt');
 // what the player has mapped: own islands are known, the rest needs the drone
 const survey = new Survey(world.islands);
 bases.forEach((b, k) => { if (b.team === 'spieler') survey.revealAll(k); });
@@ -377,7 +378,7 @@ const OBS_CAM = 'traeger-beob';
 const params = {
   zeit: env.time, zeitLaeuft: true, tempo: 1, zeitraffer: 1,
   wetter: t('weather.klar'), einheit: SHIP_NAME, kamera: '', entwickler: false,
-  zufallsWetter: true, aufloesung: 'auto', maxAufloesung: '1440p', schatten: 'hoch', bloom: false, meer: 'mosaik' as SeaStyle, befahrbarkeit: false, ton: true, stimme: true,
+  zufallsWetter: true, aufloesung: 'auto', maxAufloesung: '1440p', schatten: 'hoch', bloom: false, meer: 'stufen' as SeaStyle, befahrbarkeit: false, ton: true, stimme: true,
   bildrate: '60', hintergrundPause: true, leistung: false, seeMusik: true,
 };
 // 'Auto' never renders more pixels than this, however big the window and the display density:
@@ -388,7 +389,9 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const cg = carrierModel.group, wg = walrus.model.group, mg = manta.model.group;
 // the Stoorworm's three cameras (from its model): the bridge, astern from the mast, outside as on the title picture
 const SC = shipCameras(), sv = (p: [number, number, number]) => V(p[0], p[1], p[2]);
-cams.add({ id: 'traeger-bruecke', label: t('cam.bridgeFwd'), group: 'Träger', anchor: cg, eye: sv(SC.bruecke.eye), look: sv(SC.bruecke.look) });
+// (the bridge rolls with the ship: its windows with the rain on them are part of it, and a level picture let the
+// deck sway under glass that stood still)
+cams.add({ id: 'traeger-bruecke', label: t('cam.bridgeFwd'), group: 'Träger', anchor: cg, eye: sv(SC.bruecke.eye), look: sv(SC.bruecke.look), roll: true });
 cams.add({ id: 'traeger-achtern', label: t('cam.shipAft'), group: 'Träger', anchor: cg, eye: sv(SC.achtern.eye), look: sv(SC.achtern.look), fov: 60 });
 cams.add({ id: 'traeger-aussen', label: t('cam.shipOutside'), group: 'Träger', anchor: cg, eye: sv(SC.aussen.eye), look: sv(SC.aussen.look), fov: 50 });
 // the observation drone's camera (only while it hangs up there): from its lens, round and down, zoom to 8×
@@ -700,16 +703,21 @@ fWorld.close();
 const SETTINGS_KEY = 'skerry-settings';
 /** what is kept between games (the clock, its tempo, the time warp and the random weather belong to the saved game) */
 const KEPT = ['aufloesung', 'maxAufloesung', 'schatten', 'bloom', 'meer', 'bildrate', 'leistung', 'ton', 'stimme', 'seeMusik', 'hintergrundPause'] as const;
+/** the settings' version (2: the sea's default became the steps) */
+const SETTINGS_V = 2;
 function saveSettings() {
   if (PROBE) return;
   const kept = Object.fromEntries(KEPT.map(k => [k, params[k]]));
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ params: kept, levels: sound.levels })); } catch { /* storage blocked */ }
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: SETTINGS_V, params: kept, levels: sound.levels })); } catch { /* storage blocked */ }
 }
 /** the kept settings, at the start (missing or broken ones keep their defaults) */
 function loadSettings() {
   try {
-    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as { params?: Record<string, unknown>; levels?: Record<string, unknown> };
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as { v?: number; params?: Record<string, unknown>; levels?: Record<string, unknown> };
     const p = params as Record<string, unknown>;
+    // (settings from before version 2 kept the mosaic, the default then, with every other setting saved: they get
+    // the steps, the default now; a sea chosen since stays)
+    if (s.params && (s.v ?? 1) < 2 && s.params.meer === 'mosaik') delete s.params.meer;
     for (const k of KEPT) if (s.params && typeof s.params[k] === typeof p[k]) p[k] = s.params[k];
     for (const k of Object.keys(sound.levels) as (keyof SoundLevels)[]) {
       const v = s.levels?.[k];
@@ -926,9 +934,15 @@ for (const m of mantas) {
   };
 }
 economy.onMessage = (msg, cls) => notify(msg, cls);
-economy.onEvent = (e) => voice.say(e === 'frozen' ? 'netz-unterbrochen' : 'lager-verloren');
+economy.onEvent = (e) => {
+  if (e === 'fuelFirst') { notify(t('economy.fuelFirst', { ship: SHIP_NAME }), 'bad'); return; }
+  voice.say(e === 'frozen' ? 'netz-unterbrochen' : 'lager-verloren');
+};
+// (both sides: with the carrier's tank nearly empty its fuel goes first)
+economy.shipFuel = () => (carrier.alive ? carrier.fuel : 1);
 // ---------- the enemy: its own network by the same rules, its strategy (Omega) ----------
 const foeEconomy = new Economy(world, bases, 'feind');
+foeEconomy.shipFuel = () => (enemyShip.alive ? enemyShip.fuel : 1);
 const foePilots = new UnitPilots(enemyShip, () => {}, otterRoutes);
 /** what the enemy sees this frame (worked out once per frame for its strategy) */
 let foeEyesNow: Eye[] = [];
@@ -942,7 +956,8 @@ const omega = new Omega({ helm: enemy, otters: foeOtters, skuas: foeSkuas, pilot
 const transferModel = buildTransferDrone();
 scene.add(transferModel);
 const transfer = new TransferDrone(transferModel, world, env, carrier, economy, (msg, cls) => notify(msg, cls));
-transfer.onEvent = (e) => voice.say(e === 'netz' ? 'netz-unterbrochen' : `transfer-${e}`);
+// (back at the depot it says nothing: the user found it one line too many)
+transfer.onEvent = (e) => { if (e !== 'bereit') voice.say(e === 'netz' ? 'netz-unterbrochen' : `transfer-${e}`); };
 /** the stockpile island in transfer range last frame (null: not known yet, nothing is said) */
 let depotNear: boolean | null = null;
 /** the ship computer says when the stockpile island comes into transfer range or goes out of it (300 m of slack) */
@@ -2057,7 +2072,9 @@ function updateCrosshair() {
 }
 
 // ---------- sound per frame: listener, engines, ambience, unit events ----------
-const prevState = { walrus: walrus.state as string, manta: manta.state as string, wMsg: '', mMsg: '', wHot: false, mHot: false, tHot: false, cam: '', inbound: 0 };
+const prevState = { walrus: walrus.state as string, manta: manta.state as string, wMsg: '', mMsg: '', wHot: false, mHot: false, tHot: false, cam: '', inbound: 0,
+  /** each Otter on land last frame; the ship's fuel low (under 20 %, again over 30 %) */
+  ashore: new Map<Walrus, boolean>(), shipFuel: false };
 /**
  * The computer's warnings for the vehicle in hand while it is out: fuel (the drone's battery), armour, a weak and a
  * lost signal, each once until it has recovered a little. Taking over a vehicle that is already short says nothing.
@@ -2164,6 +2181,16 @@ function updateSound(dt: number) {
   if (inbound && !prevState.inbound) voice.say('rakete-anflug');
   prevState.inbound = inbound;
   handWarnings(hand);
+  // an Otter drives up onto an island out of the water; the ship's own fuel runs low (the warnings above are for the
+  // unit in hand only)
+  for (const w of walruses) {
+    const ashore = w.state === 'fahren' && w.medium === 'land', was = prevState.ashore.get(w);
+    if (ashore && was === false) voice.say('otter-an-land');
+    prevState.ashore.set(w, ashore);
+  }
+  const low = carrier.fuel < 0.2;
+  if (started && low && !prevState.shipFuel && carrier.alive) voice.say('treibstoff-schiff');
+  prevState.shipFuel = low ? true : carrier.fuel > 0.3 ? false : prevState.shipFuel;
   if (started) voice.update();
   // unit events
   if (manta.state !== prevState.manta) {

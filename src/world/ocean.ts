@@ -132,6 +132,9 @@ export class Ocean {
     uStMitte: { value: new THREE.Color(PAL.stufenMitte) },
     uStFlanke: { value: new THREE.Color(PAL.stufenFlanke) },
     uStKamm: { value: new THREE.Color(PAL.stufenKamm) },
+    uStFlach: { value: new THREE.Color(PAL.stufenFlach) },
+    uStUfer: { value: new THREE.Color(PAL.stufenUfer) },
+    uStSchelf: { value: new THREE.Color(PAL.stufenSchelf) },
     /** the woodcut's storm: steel blue from trough to light flank, and which way the wind blows (foam streaks, lee) */
     uStormTal: { value: new THREE.Color(PAL.wasserSturmTal) },
     uStormKamm: { value: new THREE.Color(PAL.wasserSturmKamm) },
@@ -233,7 +236,7 @@ export class Ocean {
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', /* glsl */ `#include <common>
           uniform float uTime, uStorm, uSea, uToon, uAmp, uWind;
-          uniform vec3 uLightDir, uGlint, uStormTal, uStormKamm, uStTal, uStMitte, uStFlanke, uStKamm;
+          uniform vec3 uLightDir, uGlint, uStormTal, uStormKamm, uStTal, uStMitte, uStFlanke, uStKamm, uStFlach, uStUfer, uStSchelf;
           uniform float uGlintK, uPxScale;
           uniform vec2 uWindDir;
           uniform vec3 uShallow, uMid, uDeep, uFoam, uStormCol, uStormLine, uSeaFar, uIce, uIceDark;
@@ -346,8 +349,9 @@ export class Ocean {
           ${steps ? `
           // the woodcut: the shallows in three hard steps of depth (their edges wobble a little, like cut by hand)
           float dwob = 0.5 * sin(vWorld.x * 0.031 + vWorld.z * 0.027 + uTime * 0.35) + 0.3 * sin(vWorld.z * 0.07 - vWorld.x * 0.05);
-          water = mix(uShallow, uMid, 1.0 - below(depth + dwob, 3.0));
-          water = mix(water, uDeep, 1.0 - below(depth + dwob, 10.0));
+          // (in the Atlantic's own shades: the mosaic's turquoise shone out against the dark sea)
+          water = mix(uStFlach, uStUfer, 1.0 - below(depth + dwob, 3.0));
+          water = mix(water, uStSchelf, 1.0 - below(depth + dwob, 10.0));
           // on open water the swell's height in four steps, navy in the troughs to steel blue on the crests; a higher sea
           // widens them less than it grows, so its steps lie closer
           vec2 sp = vWorld.xz;
