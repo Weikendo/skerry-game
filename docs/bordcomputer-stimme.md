@@ -96,7 +96,7 @@ Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-kampf.txt`, erst Deutsc
 
 ### Otter und der Treibstoff der Stoorworm (vierte Runde, 29.10.2026)
 
-Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-otter.txt`, erst Deutsch, dann Englisch. Die Auslöser sind schon eingebaut; bis die Aufnahmen da sind, überspringt der Bordcomputer die drei Sätze. Gewünscht vom Spieler: Bisher sagte die Stimme zu den Ottern nur „Otter verloren.“, und für das Schiff selbst warnte sie nie vor knappem Treibstoff (nur für das Fahrzeug in der Hand).
+Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-otter.txt`, erst Deutsch, dann Englisch. Sie kamen als eine Aufnahme je Sprache (knapp 6 s) und sind wie die anderen an den Pausen geschnitten und auf −20 LUFS angeglichen. Die Pause im dritten Satz nach „Treibstoff“ bzw. „Stoorworm“ bleibt drin. Dass sie dort sitzt, zeigt die Länge: „der Stoorworm knapp“ dauert 1,44 s wie das vorhandene „Die Stoorworm sinkt.“. Gewünscht vom Spieler: Bisher sagte die Stimme zu den Ottern nur „Otter verloren.“, und für das Schiff selbst warnte sie nie vor knappem Treibstoff (nur für das Fahrzeug in der Hand).
 
 | ID | Deutsch | English | Auslöser | Prio |
 |---|---|---|---|---|
