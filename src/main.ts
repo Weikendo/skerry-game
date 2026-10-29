@@ -65,7 +65,7 @@ import { CamBar } from './ui/camBar';
 import { Strikes } from './game/strikes';
 import { uiScale, updateUiScale } from './ui/scale';
 import { MonitorWall, type MonitorButton, type MonitorGroup, type MonitorState } from './ui/monitors';
-import { otterCargoName, OTTER_CARGO, otterFit, refit, REPAIR_PER_SECOND, SKUA_CARGO, skuaCargoGoods, skuaCargoName, skuaCargoOf, skuaFit, walrusGoods } from './game/arsenal';
+import { HARBINGER_LOAD, otterCargoName, OTTER_CARGO, otterFit, refit, REPAIR_PER_SECOND, SKUA_CARGO, skuaCargoGoods, skuaCargoName, skuaCargoOf, skuaFit, walrusGoods } from './game/arsenal';
 import { GOODS, type Good } from './game/stores';
 import { Menu, type SettingItem, type SettingTab } from './ui/menu';
 import { Intro } from './ui/intro';
@@ -954,6 +954,8 @@ shields.blocked = () => transfer.state === 'angedockt';
 economy.droneCargo = () => transfer.cargo;
 const supply = new SupplyScreen(world, bases, economy, transfer, carrier, (msg, cls) => notify(msg, cls));
 
+/** N: the sound on or off (also while the end's film runs) */
+function toggleSound() { params.ton = !params.ton; sound.enabled = params.ton; sound.applyLevels(); saveSettings(); }
 function handleKeys(dt: number) {
   // the pad only drives the units: an open window (the stores) keeps it out of the game; on the open map it
   // drives on while the mouse sets waypoints
@@ -1016,7 +1018,7 @@ function handleKeys(dt: number) {
   }
   if (input.hit('KeyM')) { map.toggle(); sound.blip(); }
   if (input.hit('KeyG')) { supply.toggle(); sound.blip(); }
-  if (input.hit('KeyN')) { params.ton = !params.ton; sound.enabled = params.ton; sound.applyLevels(); saveSettings(); }
+  if (input.hit('KeyN')) toggleSound();
   if (input.hit('KeyB')) {
     params.befahrbarkeit = !params.befahrbarkeit;
     world.setOverlay(params.befahrbarkeit);
@@ -1385,6 +1387,11 @@ function nextLoad(u: UnitId) {
     const w = walruses[indexOf(u)], i = OTTER_CARGO.findIndex(o => o.cargo === w.fit.cargo && (o.cargo !== 'accb' || o.role === w.fit.role));
     for (let k = 1; k <= OTTER_CARGO.length; k++) {
       const o = OTTER_CARGO[(i + k) % OTTER_CARGO.length], next = otterFit(o.cargo, o.role);
+      // (a Harbinger launcher takes what the hold has, up to four: docking fills it up later)
+      if (o.cargo === 'harbinger') {
+        next.missiles = Math.min(HARBINGER_LOAD, st.harbinger + (w.load.cargo === 'harbinger' ? w.load.missiles : 0));
+        if (!next.missiles) continue;
+      }
       if (refit(st, walrusGoods(w.load), walrusGoods(next), names)) continue;   // not in the hold: the next one
       w.fit = next;
       w.load = { ...w.load, cargo: next.cargo, role: next.role, missiles: next.missiles };
@@ -2838,7 +2845,7 @@ function step(now: number, fixedDt?: number) {
   // (back in the game after the end screen: its own cameras again)
   finale.release();
   // while the victory's film runs the player only watches: a click, a key or a pad button goes on
-  if (finale.on) { if (input.hit('Pad.A', 'Pad.B', 'Pad.X', 'Pad.Y', 'Pad.Start')) finale.next(); }
+  if (finale.on) { if (input.hit('Pad.A', 'Pad.B', 'Pad.X', 'Pad.Y', 'Pad.Start')) finale.next(); if (input.hit('KeyN')) toggleSound(); }
   else { pointerFrame(dt); handleKeys(dt); }
   if (menu.open) { input.endFrame(); return; }
   const simDt = simulate(dt);
@@ -2949,7 +2956,8 @@ function updateEnd(dt: number) {
   if (ds && carrier.sinking > 8 && !finale.on) return endGame(false, 'traeger');
   if (bases.every(b => b.team === 'feind')) return endGame(false, 'inseln');
   if (game.over) return;
-  if (!game.omegaSunk && de && enemyShip.sinking > 10) { game.omegaSunk = true; return endGame(true, 'omega'); }
+  // (with the Stoorworm going down as well, the defeat stands: its film ends the game)
+  if (!game.omegaSunk && de && !ds && enemyShip.sinking > 10) { game.omegaSunk = true; return endGame(true, 'omega'); }
   if (bases.every(b => b.team === 'spieler')) return endGame(true, 'inseln');
 }
 /** the game is won or lost: the end screen with the tally (after sinking the enemy's ship the player may go on) */
@@ -3060,8 +3068,9 @@ function applyState(save: SaveGame) {
 }
 
 function autosave() {
-  // the test range never overwrites the real game's autosave, a lost game neither
-  if (!started || PROBE || inTraining || game.over === 'niederlage') return;
+  // the test range never overwrites the real game's autosave, a lost game neither, nor the end's film (the outcome is
+  // decided then but not yet the game's: a save then came back with the ship sunk and no end screen ever)
+  if (!started || PROBE || inTraining || finale.on || game.over === 'niederlage') return;
   playStats.lastAuto = playStats.time;
   const why = writeSave('auto', makeSave(defaultSaveName()));
   if (why) notify(t('save.autoFailed', { why }), 'bad');
@@ -3096,12 +3105,13 @@ function startGame(fresh: boolean, difficulty: Difficulty = 'normal', withTutori
  * that leads through it (src/ui/training.ts); the enemy keeps still, the weather stays clear, nothing is saved
  */
 function startTraining() {
+  // (no quiet island for it in this world: a plain new game, with the enemy and the weather as always)
+  const spot = findRange(world, bases, enemyShip.pos);
+  if (!spot) { startGame(true); notify(t('train.none'), 'bad'); return; }
   inTraining = true;
   startGame(true);
   omega.setHold(true);
   env.setWeather('klar', true); params.wetter = WEATHER_NAME.klar; weather.enabled = false;
-  const spot = findRange(world, bases, enemyShip.pos);
-  if (!spot) { notify(t('train.none'), 'bad'); return; }
   range = new TrainingRange(spot, world, combat);
   scene.add(range.group);
   rangeRing = wakeField.addRing(foeShape.waterline(), 9);
@@ -3160,7 +3170,7 @@ const menu = new Menu({
     requestBoot({ kind: 'load', save });
     reloadInto(save.meta.seed, save.meta.count);
   },
-  save: (slot, name) => (inTraining ? t('train.noSave') : writeSave(slot, makeSave(name))),
+  save: (slot, name) => (inTraining ? t('train.noSave') : finale.on ? t('finale.noSave') : writeSave(slot, makeSave(name))),
   training: () => inTraining,
   // the training starts afresh in the same world (a running game is saved first)
   startTraining: () => {
@@ -3183,8 +3193,9 @@ const menu = new Menu({
   // the other language: remembered, then the page starts afresh in it; a running game is saved and goes straight on
   language: (l) => {
     setLang(l);
+    // (not in the middle of the end's film: that state is no game to go on with; the last autosave stays)
     if (inTraining) requestBoot({ kind: 'training' });
-    else if (started && !PROBE && game.over !== 'niederlage') { autosave(); requestBoot({ kind: 'load', save: makeSave(defaultSaveName()), quiet: true }); }
+    else if (started && !PROBE && !finale.on && game.over !== 'niederlage') { autosave(); requestBoot({ kind: 'load', save: makeSave(defaultSaveName()), quiet: true }); }
     leaving = true;
     reloadPage(PROBE ? location.search : `?seed=${worldSeed}&inseln=${worldCount}`);
   },

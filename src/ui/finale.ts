@@ -32,6 +32,8 @@ const SHOTS: Shot[] = [
 /** s before the word comes up, and before the hint under it */
 const WORD_AT = 4;
 const HINT_AFTER = 1.6;
+/** s at the start in which a click or a key does nothing: the player is usually still firing when the hull gives out */
+const GRACE = 1.5;
 
 /**
  * The end of a carrier as a short film: the picture cuts between cameras round the sinking ship, the console and its
@@ -65,9 +67,10 @@ export class Finale {
     this.wordEl = this.el.querySelector('.word')!;
     document.body.append(this.el);
     this.el.addEventListener('pointerdown', (e) => { e.preventDefault(); this.next(); });
-    // any key goes on too, and nothing else hears it meanwhile (Esc would open the pause menu over the film)
+    // any key goes on too, and nothing else hears it meanwhile (Esc would open the pause menu over the film); not
+    // the browser's and the system's shortcuts with Cmd, Ctrl or Alt, nor N (the sound, the game toggles it)
     addEventListener('keydown', (e) => {
-      if (!this.on || e.repeat || ['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+      if (!this.on || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.code === 'KeyN' || ['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
       e.preventDefault(); e.stopPropagation();
       this.next();
     }, true);
@@ -97,9 +100,9 @@ export class Finale {
     document.body.classList.remove('finale');
   }
 
-  /** a click, a key or a pad button: the word now, or on to the end screen */
+  /** a click, a key or a pad button: the word now, or on to the end screen (not in the film's first moment) */
   next() {
-    if (!this.on) return;
+    if (!this.on || this.time < GRACE) return;
     if (!this.word) { this.time = Math.max(this.time, WORD_AT); return; }
     if (this.time < this.wordTime + 0.6) return;
     this.stop();
@@ -128,7 +131,7 @@ export class Finale {
     const total = SHOTS.reduce((a, s) => a + s.seconds, 0);
     let t = this.time % total, i = 0;
     while (t >= SHOTS[i].seconds) { t -= SHOTS[i].seconds; i++; }
-    const s = SHOTS[i], k = t / s.seconds, e = k * k * (3 - 2 * k);
+    const s = SHOTS[i], e = THREE.MathUtils.smoothstep(t / s.seconds, 0, 1);
     const ship = this.ship;
     const at = (p: [number, number, number], q: [number, number, number], out: THREE.Vector3, overDeck: boolean) => {
       const x = p[0] + (q[0] - p[0]) * e, y = p[1] + (q[1] - p[1]) * e, z = p[2] + (q[2] - p[2]) * e;

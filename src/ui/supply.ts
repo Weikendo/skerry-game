@@ -26,6 +26,12 @@ const GROUPS: { title: string; goods: PlayerGood[] }[] = [
   { title: t('supply.grp.spare'), goods: ['walrus', 'manta', 'drohne'] },
 ];
 const COLUMNS = ['colGood', 'colPrio', 'colTarget', 'colShip', 'colDepot', 'colTransit', 'colBuilding'] as const;
+// (a good the network makes but no group lists has no row: it could never be ordered, and nothing would say so; the
+// Harbinger was one)
+for (const g of PLAYER_GOODS) {
+  const n = GROUPS.reduce((a, grp) => a + grp.goods.filter(x => x === g).length, 0);
+  if (n !== 1) console.error(`Lager: ${g} steht ${n}-mal in den Gruppen (soll: einmal)`);
+}
 
 /** make island k the stockpile island and say so (or why not): from the supply screen and the island menu on the map */
 export function moveDepot(economy: Economy, world: Archipelago, k: number, notify: (msg: string, cls?: string) => void) {

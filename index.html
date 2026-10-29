@@ -625,7 +625,8 @@
   /* H: only the picture */
   body.ui-hidden #deck, body.ui-hidden #helm, body.ui-hidden #help, body.ui-hidden #hud, body.ui-hidden #messages { display: none !important; }
   /* the victory's film (src/ui/finale.ts): the console out of the way, a big word up in the sky once it is up (the ship sits in the middle) */
-  body.finale :is(#deck, #helm, #help, #hud, #messages, #cambar, #crosshair, #tut, #train, #guide, #supply, #map) { display: none !important; }
+  body.finale :is(#deck, #helm, #help, #hud, #messages, #cambar, #crosshair, #tut, #train, #guide, #supply, #map,
+    #static, #tinfo, #lead, #hitmark, #incoming, #lock) { display: none !important; }
   #finale { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2.2vh;
     padding-top: 11vh; box-sizing: border-box; cursor: pointer; user-select: none; }
   #finale.on { display: flex; }

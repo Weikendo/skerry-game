@@ -87,7 +87,6 @@ const SCENES: Record<SoundScene, SceneMix> = {
 /** how fast one soundscape fades into the next (time constant, s): about as quick as a cut, without a click */
 const SCENE_FADE = 0.2;
 
-const smooth = (a: number, b: number, x: number) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 /**
  * The game's sound (Web Audio): sea, wind, rain and thunder, the engines and UI blips are synthesised as they play;
@@ -216,6 +215,7 @@ export class SoundEngine {
     this.buildDefenceLoops();
     this.buildEcho();
     this.applyLevels();
+    this.applyScene();
     void this.loadSamples();
     void this.forgeAll();
   }
@@ -601,6 +601,11 @@ export class SoundEngine {
     if (s === this.sceneNow) return;
     this.sceneNow = s;
     this.mix = SCENES[s];
+    this.applyScene();
+  }
+
+  /** the scene's filters and levels (again once the sound starts: a scene set before then had nothing to set) */
+  private applyScene() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, m = this.mix;
     this.muffle.frequency.setTargetAtTime(m.muffle, t, SCENE_FADE);
@@ -633,12 +638,12 @@ export class SoundEngine {
     bed('seegang', 0.1 * (0.4 + waves * 0.3) * high * m.waves, 1.08 - waves * 0.06);
     this.wavesFilter.frequency.setTargetAtTime(height > 120 ? 900 : OPEN, t, SCENE_FADE);
     // the gusts: louder and quicker in a stronger wind
-    bed('boeen', 0.5 * Math.min(2, 0.4 + wind / 15) * m.gusts * (m.gusts < 1 ? smooth(6, 20, wind) : 1), 0.85 + Math.min(wind, 26) / 26 * 0.3);
+    bed('boeen', 0.5 * Math.min(2, 0.4 + wind / 15) * m.gusts * (m.gusts < 1 ? THREE.MathUtils.smoothstep(wind, 6, 20) : 1), 0.85 + Math.min(wind, 26) / 26 * 0.3);
     // the bridge in a storm: the wind whistles, higher the stronger it blows; rain on the glass (recordings), drops, then a patter
-    const storming = smooth(12, 20, wind);
+    const storming = THREE.MathUtils.smoothstep(wind, 12, 20);
     bed('pfeifen', 0.03 * storming * m.whistle, 0.9 + storming * 0.25);
-    bed('scheibe-leicht', 0.1 * smooth(0, 0.3, rain) * (1 - 0.5 * smooth(0.5, 1, rain)) * m.glass);
-    bed('scheibe-stark', 0.27 * smooth(0.25, 0.9, rain) * m.glass);
+    bed('scheibe-leicht', 0.1 * THREE.MathUtils.smoothstep(rain, 0, 0.3) * (1 - 0.5 * THREE.MathUtils.smoothstep(rain, 0.5, 1)) * m.glass);
+    bed('scheibe-stark', 0.27 * THREE.MathUtils.smoothstep(rain, 0.25, 0.9) * m.glass);
     if (this.room) {
       this.room.hvac.gain.setTargetAtTime(0.026 * m.hvac, t, SCENE_FADE);
     }
