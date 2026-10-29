@@ -102,7 +102,7 @@ Die Sätze zum Einsprechen stehen in `docs/stimme-saetze-otter.txt`, erst Deutsc
 |---|---|---|---|---|
 | `otter-wegpunkt` | Otter am Wegpunkt. | Otter at waypoint. | der Autopilot eines Otters kommt an (`pilot.waypointReached`) | 3 |
 | `otter-an-land` | Otter an Land. | Otter ashore. | ein eigener Otter fährt vom Wasser auf eine Insel; frühestens alle 20 s | 3 |
-| `treibstoff-schiff` | Treibstoff der Stoorworm knapp. | Stoorworm fuel low. | Treibstoff der Stoorworm unter 20 % (wieder scharf ab 30 %) | 2 |
+| `treibstoff-schiff` | Treibstoff der Stoorworm knapp. | Stoorworm fuel low. | Treibstoff der Stoorworm unter 15 %, wenn ihr Tank auf Karte und Brücke rot wird (wieder scharf ab 25 %) | 2 |
 
 `transfer-bereit` („Transferdrohne wieder bereit.“) ist am selben Tag entfallen.
 

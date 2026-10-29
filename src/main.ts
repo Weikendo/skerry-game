@@ -2188,9 +2188,10 @@ function updateSound(dt: number) {
     if (ashore && was === false) voice.say('otter-an-land');
     prevState.ashore.set(w, ashore);
   }
-  const low = carrier.fuel < 0.2;
+  // (below 15 %, when the map's and the helm's tank turn red: about 2 minutes at full speed)
+  const low = carrier.fuel < 0.15;
   if (started && low && !prevState.shipFuel && carrier.alive) voice.say('treibstoff-schiff');
-  prevState.shipFuel = low ? true : carrier.fuel > 0.3 ? false : prevState.shipFuel;
+  prevState.shipFuel = low ? true : carrier.fuel > 0.25 ? false : prevState.shipFuel;
   if (started) voice.update();
   // unit events
   if (manta.state !== prevState.manta) {

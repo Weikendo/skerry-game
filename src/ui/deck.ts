@@ -231,7 +231,7 @@ export class Deck {
     if (c.grounded) lines.push(warn(t('hud.aground')));
     else if (c.dragged) lines.push(t('deck.shieldCap', { kn: num(c.speedLimit * KN) }));
     else if (c.limited) lines.push(warn(t('hud.coast', { kn: num(c.speedLimit * KN) })));
-    if (c.fuel <= 0) lines.push(warn(t('hud.fuelEmpty'))); else if (c.fuel < 0.2) lines.push(warn(t('hud.fuelLow')));
+    if (c.fuel <= 0) lines.push(warn(t('hud.fuelEmpty'))); else if (c.fuel < 0.15) lines.push(warn(t('hud.fuelLow')));
     // the hull's repair: at a yard, patched at sea, or where the rest can be mended
     const r = c.repair;
     if (r.kind === 'werft') lines.push(t('deck.repair.yard', { island: r.island }));
