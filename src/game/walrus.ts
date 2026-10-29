@@ -31,6 +31,11 @@ const DOCK_TAKE = -100 - 6.5;
 const DOCK_TURN = -112;
 const LAUNCH_Z = -124;       // where the launch animation hands over control
 const DOCK_MAX_SPEED = 6.5;  // carrier speed limit for docking ("Langsam" is 6 m/s)
+/** carrier-local |x| the Walrus's centre must keep below to fit through the dock's opening (it spans ±27) */
+const DOCK_MOUTH = 22;
+/** up to this far (m) outside DOCK_MOUTH at the opening, while some of its 8.6 m width is still in front of it, it
+ *  slides along the corner into it instead of stopping dead */
+const DOCK_SLIDE = 9;
 const HALF_LEN = 8.5, HALF_WID = 4.3;
 // in the original a Walrus tank lasts 264 km; scaled down with the sea like the carrier's tank (419 → 18 km). (It used
 // to keep the original's ratio to the radio range, ten times 5 km: testers found an Otter never ran dry.)
@@ -445,7 +450,17 @@ export class Walrus implements Target {
     const l = c.worldToLocal(next);
     const inHull = Math.abs(l.x) < 40 + HALF_WID && l.z > -100 - HALF_LEN && l.z < c.model.stemZ + HALF_LEN;
     if (!inHull) return false;
-    const inDockMouth = Math.abs(l.x) < 22 && l.z < -88;
+    const now = c.worldToLocal(this.pos);
+    // at the opening a little too far to one side, heading in: it slides sideways along the stern into the opening
+    // (it used to stop dead at the corner, and only backing off got it free; the outer bays leave under 2 m to spare)
+    const wide = Math.abs(l.x) - DOCK_MOUTH;
+    if (wide >= 0 && wide < DOCK_SLIDE && l.z < -88 && l.z > now.z && !this.dockBusy) {
+      const step = Math.hypot(l.x - now.x, l.z - now.z), y = next.y;
+      c.localToWorld(Math.sign(l.x) * Math.max(DOCK_MOUTH - 0.05, Math.abs(now.x) - step), now.z, next);
+      next.y = y;
+      return false;
+    }
+    const inDockMouth = Math.abs(l.x) < DOCK_MOUTH && l.z < -88;
     if (inDockMouth) {
       if (this.dockBusy) { this.say(t('otter.dockBusyWait')); return true; }
       if (Math.abs(c.speed) > DOCK_MAX_SPEED) {
@@ -462,7 +477,6 @@ export class Walrus implements Target {
     }
     // already inside the hull's outline (squeezed in at the dock corner): moving outwards is always allowed
     const out = (q: { x: number; z: number }) => Math.max(Math.abs(q.x) - 40 - HALF_WID, -100 - HALF_LEN - q.z, q.z - 100 - HALF_LEN);
-    const now = c.worldToLocal(this.pos);
     if (out(now) < 0 && out(l) > out(now)) return false;
     this.say(t('otter.contact'));
     return true;

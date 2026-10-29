@@ -411,10 +411,10 @@ export class Ocean {
           float breaking = smoothstep(10.0, 16.0, uWind) * openSea;
           float crest = 0.0;
           if (uWind > 7.0) {
-            // the slope from the pixel's neighbours: the sea's height gradient in the world, turned back from the screen's
-            mat2 toScreen = transpose(mat2(dFdx(sp), dFdy(sp)));
-            vec2 slope = inverse(toScreen) * vec2(dFdx(sh), dFdy(sh));
-            float fall = clamp(-dot(slope, uWindDir) * 4.0 / bandH, -2.0, 2.0), lee = smoothstep(0.03, 0.25, fall);
+            // how the sea falls away downwind: its height 1.5 m further along the wind (from the pixel's neighbours, as it
+            // was, the step spans metres in a low view over the water and jumps from one pixel block to the next: the
+            // foam's edges came out grainy and striped, a moiré in motion and under an Otter's headlights)
+            float fall = clamp((sh - seaField(sp + uWindDir * 1.5)) / 1.5 * 4.0 / bandH, -2.0, 2.0), lee = smoothstep(0.03, 0.25, fall);
             float broken = smoothstep(0.3, 0.55, vnoise(sp / 9.0 + uTime * vec2(0.05, 0.03)));
             crest = (1.0 - below(sx, capT)) * below(sx, capT + mix(0.22, 0.5, gust)) * lee * broken * smoothstep(7.0, 10.0, uWind) * openSea;
             crest = max(crest, (1.0 - below(sx, capT - mix(0.25, 0.85, gust))) * lee * (0.35 + 0.65 * broken) * breaking);
