@@ -624,6 +624,16 @@
   body.map-open #messages { z-index: 21; }
   /* H: only the picture */
   body.ui-hidden #deck, body.ui-hidden #helm, body.ui-hidden #help, body.ui-hidden #hud, body.ui-hidden #messages { display: none !important; }
+  /* what the device cannot do (src/ui/gate.ts): above everything, the boot screen too */
+  #gate { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+    background: rgba(4,12,18,.9); }
+  #gate .panel { max-width: 520px; background: rgba(8,24,32,.96); border: 1px solid #2c6f8a; border-radius: 8px; padding: 20px 22px;
+    color: #dfe6ec; font: 15px/1.5 -apple-system, sans-serif; }
+  #gate b { display: block; font-size: 18px; letter-spacing: .04em; color: #f2c46a; margin-bottom: 8px; }
+  #gate p { margin: 0 0 14px; }
+  #gate p:last-child { margin-bottom: 0; }
+  #gate button { font: 600 15px -apple-system, sans-serif; color: #dfe6ec; background: rgba(12,40,52,.9); border: 1px solid #2c6f8a; border-radius: 6px;
+    padding: 9px 16px; cursor: pointer; }
   /* the victory's film (src/ui/finale.ts): the console out of the way, a big word up in the sky once it is up (the ship sits in the middle) */
   body.finale :is(#deck, #helm, #help, #hud, #messages, #cambar, #crosshair, #tut, #train, #guide, #supply, #map,
     #static, #tinfo, #lead, #hitmark, #incoming, #lock) { display: none !important; }

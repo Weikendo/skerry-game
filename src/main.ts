@@ -1,3 +1,5 @@
+// (first: what the device cannot do, before anything is built)
+import './ui/gate';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';

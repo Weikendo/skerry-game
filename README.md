@@ -19,6 +19,14 @@ Skerry ist ein Strategie- und Actionspiel auf hoher See, eine Hommage an **Carri
 - Steuerung mit Maus und Tastatur, Trackpad oder Gamepad. Die Einführung beim ersten Spiel, das Kampftraining im Hauptmenü und das Menü → Anleitung erklären alles Weitere.
 - Deutsch und Englisch, je nach Sprache des Systems; umschalten im Hauptmenü.
 
+## Systemvoraussetzungen
+
+- **Computer:** Mac oder PC mit Tastatur und Maus oder Trackpad, oder mit einem Controller. Auf Handys und Tablets ohne Maus lässt sich Skerry nicht steuern, das Spiel sagt das beim Start.
+- **Browser:** ein aktueller Chrome oder Edge (empfohlen). Safari läuft, spielt aber manchmal keine Musik. Nötig ist WebGL 2.
+- **Grafik:** Auf einem Mac mit M3 braucht ein Bild 6 bis 12 ms (1440 × 810). Wird es knapp, senkt das Spiel die Auflösung selbst, und in den Einstellungen lässt es sich auf 30 Bilder pro Sekunde begrenzen.
+- **Bildschirm:** gestaltet für 1920 × 1080, auf kleineren Bildschirmen wird die Oberfläche kompakter.
+- **Mac-App:** Apple-Chip (M1 oder neuer) und macOS 13 Ventura oder neuer. **Windows-App** (selbst gebaut, nicht getestet): Windows 10 oder neuer, 64 Bit.
+
 ## Selbst bauen
 
 Mit [Node.js](https://nodejs.org) 20 oder neuer:
@@ -64,6 +72,14 @@ Skerry is a strategy and action game on the high seas, a homage to **Carrier Com
 - Runs in the browser, right at [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/) (Chrome or Edge on a Mac or PC recommended), and as a Mac or Windows app you can build yourself.
 - Mouse and keyboard, trackpad or gamepad. The tutorial in your first game, the combat training in the main menu and Menu → How to play explain the rest.
 - English and German, following the system language; switch in the main menu.
+
+### System requirements
+
+- **Computer:** a Mac or PC with a keyboard and a mouse or trackpad, or with a controller. Skerry cannot be steered on phones and tablets without a mouse, and says so when it starts.
+- **Browser:** a current Chrome or Edge (recommended). Safari works but sometimes plays no music. WebGL 2 is required.
+- **Graphics:** on a Mac with an M3 a frame takes 6 to 12 ms (1440 × 810). When it gets tight the game lowers its resolution by itself, and the settings can cap it at 30 frames per second.
+- **Screen:** designed for 1920 × 1080; on smaller screens the interface becomes more compact.
+- **Mac app:** Apple silicon (M1 or later) and macOS 13 Ventura or later. **Windows app** (build it yourself, untested): Windows 10 or later, 64-bit.
 
 ### Building
 
