@@ -4,7 +4,7 @@ import { PAL } from '../engine/palette';
 import type { Effects } from '../world/effects';
 import type { Ground } from '../world/terrain';
 import { additiveMaterial, fogFade, spindle } from '../world/fxShapes';
-import { DAMAGE, HAMMERHEAD, HARBINGER, QUAKER } from './arsenal';
+import { DAMAGE, HAMMERHEAD, HARBINGER, QUAKER, TURRET_VS_HULL } from './arsenal';
 
 export type Team = 'spieler' | 'feind' | 'neutral';
 export type WeaponKind = 'laser' | 'kanone' | 'rakete' | 'harbinger' | 'quaker' | 'virus' | 'hammerhead';
@@ -47,6 +47,10 @@ export interface Target {
   hit(damage: number, at: THREE.Vector3): boolean;
   /** a dummy of the combat training: hit only by hand, nothing aims at it by itself */
   readonly dummy?: boolean;
+  /** a carrier's armoured hull: a laser turret's bolts strike it at TURRET_VS_HULL */
+  readonly armoured?: boolean;
+  /** a defence drone: it only stands in the way (a laser turret never picks it; its bolts burst it in the line) */
+  readonly shield?: boolean;
 }
 
 interface Projectile {
@@ -544,7 +548,7 @@ export class Combat {
         return true;
       }
       if (s.kind === 'quaker') { this.burst(s, at); return true; }
-      const killed = hitT.hit(s.damage, at);
+      const killed = hitT.hit(s.intercept && hitT.armoured ? s.damage * TURRET_VS_HULL : s.damage, at);
       // (a Hammerhead's is a big one, with the long roll of thunder after it)
       if (s.kind === 'hammerhead') this.effects.hammerBlast(at);
       else if (MISSILES.includes(s.kind)) this.effects.explosion(at, s.kind === 'harbinger' ? 1.3 : 0.8); else this.effects.impact(at, 'hit', d, s.heavy ? 1.3 : 1);

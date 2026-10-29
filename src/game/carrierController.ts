@@ -61,6 +61,7 @@ export class CarrierController implements Target {
   readonly name: string;
   readonly team: Team;
   readonly kind = 'einheit' as const;
+  readonly armoured = true;
   readonly maxHp = HP.carrier;
   hp = HP.carrier;
   /** seconds since the hull gave out (-1 afloat): the ship stops, burns, lists and goes down */

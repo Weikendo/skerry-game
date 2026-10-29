@@ -63,6 +63,7 @@ const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export class ShieldDrone implements Target {
   readonly kind = 'einheit' as const;
+  readonly shield = true;
   readonly maxHp = 1;
   hp = 1;
   alive = true;

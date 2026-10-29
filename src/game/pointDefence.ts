@@ -7,7 +7,8 @@ import { LaserWeapon } from './weapons';
 /**
  * A carrier's laser turret, as in the original: all the way round, up and down, zoom up to 8× and a heat gauge;
  * hot, it first loses power, then cuts out. Here it also fights on its own: the other side's missiles first, then
- * its aircraft and vehicles near the ship, in short bursts. The player takes over the Stoorworm's through its
+ * its aircraft and vehicles near the ship, in short bursts, and with nothing of those about the other side's carrier
+ * within the same reach (its bolts do a carrier's armoured hull little harm, TURRET_VS_HULL, but they add up). The player takes over the Stoorworm's through its
  * turret camera; the enemy's fights the better the harder the game.
  */
 export const TURRET = {
@@ -181,7 +182,7 @@ export class PointDefence {
     if (!this.missile) {
       bd = Infinity;
       for (const t of combat.targets) {
-        if (!t.alive || t.dummy || t.kind !== 'einheit' || t.team === this.team || t.team === 'neutral' || this.ships.includes(t)) continue;
+        if (!t.alive || t.dummy || t.shield || t.kind !== 'einheit' || t.team === this.team || t.team === 'neutral' || this.ships.includes(t)) continue;
         const c = t.centre(this.tp);
         const d = c.distanceTo(ship);
         if (d > TURRET.unitRange) continue;
@@ -189,6 +190,13 @@ export class PointDefence {
         if (c.y < 30 && this.ships.some(s => s.team !== this.team && Math.hypot(s.centre(this.tv).x - c.x, this.tv.z - c.z) < 110)) continue;
         const score = c.y > 25 ? d : d * 1.5;
         if (score < bd && combat.clear(from, c)) { bd = score; this.unit = t; }
+      }
+    }
+    if (!this.missile && !this.unit) {
+      for (const s of this.ships) {
+        if (!s.alive || s.team === this.team) continue;
+        const c = s.centre(this.tp);
+        if (c.distanceTo(ship) < TURRET.unitRange && combat.clear(from, c)) this.unit = s;
       }
     }
     if ((this.missile ?? this.unit) !== before) { this.onFor = 0; this.burstLeft = TURRET.burst; }

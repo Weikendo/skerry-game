@@ -104,6 +104,7 @@ export function findRange(world: Archipelago, bases: IslandBase[], foe: { x: num
 /** the target ship: the Nuckelavee's shape at anchor; sunk, it goes down as a carrier does, and a new one takes its place */
 class DummyShip implements Target {
   readonly kind = 'einheit' as const;
+  readonly armoured = true;
   readonly team = 'feind' as const;
   readonly dummy = true;
   /** s since it was sunk (-1: afloat), as a carrier's (main.ts sets off the blasts and fires on it) */

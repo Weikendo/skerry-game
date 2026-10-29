@@ -14,6 +14,14 @@ import { t } from '../i18n';
 export const HP = { vehicle: 4000, drone: 1200, carrier: 4000 };
 /** the hull takes 3/16 of every hit, the rest goes to the (not yet modelled) sections */
 export const CARRIER_HULL_SHARE = 3 / 16;
+/**
+ * A carrier's armour against the other carrier's laser turret: its bolts strike a hull at a tenth. The turret is for
+ * missiles, aircraft and vehicles; at full strength, taken over by hand, it sank the other carrier in about 5 s
+ * (28 hits). Now it takes 83 s by hand (700 m off, every bolt a hit, the laser's heat allowing), while the other's
+ * turret fires back: the Stoorworm loses 15 / 28 / 41 % of her hull meanwhile (easy / normal / hard). (The Otters' and
+ * Skuas' lasers keep their strength: the enemy's Skuas do most of the harm to the Stoorworm.)
+ */
+export const TURRET_VS_HULL = 0.1;
 export const DAMAGE = {
   quasar: 256, avatar: 768, assassin: 1024, harbinger: 3072, quaker: 512,
   /**
