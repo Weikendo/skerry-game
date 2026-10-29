@@ -177,9 +177,11 @@ export class SoundEngine {
     return !!this.ctx && this.ctx.state === 'running';
   }
 
-  /** browsers only allow audio after a user gesture: call from one */
+  /** browsers only allow audio after a user gesture: call from one (every click and key press does; Safari also
+   *  stops the sound as "interrupted" now and then, e.g. after another tab or app took the audio, and only a gesture
+   *  brings it back: it stayed silent when only "suspended" was resumed) */
   unlock() {
-    if (this.ctx) { if (this.ctx.state === 'suspended' && !this.paused) void this.ctx.resume(); return; }
+    if (this.ctx) { if (this.ctx.state !== 'running' && this.ctx.state !== 'closed' && !this.paused && !document.hidden) void this.ctx.resume(); return; }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     const ctx = new AC();

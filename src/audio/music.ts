@@ -42,6 +42,22 @@ export class TitleMusic {
     });
     // played once to the end: silent and back at the start
     this.el.addEventListener('ended', () => this.rest());
+    // Safari lets a page start a sound element on its own only once it has played in a click or key press (Chrome
+    // after any one): on the first, unless it plays already, it starts muted and stops again, so the voyage's and the
+    // victory's music may start later by themselves (they stayed silent in Safari)
+    const prime = () => {
+      removeEventListener('pointerdown', prime, true);
+      removeEventListener('keydown', prime, true);
+      if (this.playing) return;
+      this.el.muted = true;
+      // (the boot's own press may start the title music in the same moment: play() sets the target before it waits)
+      this.el.play()
+        .then(() => { if (!this.playing && this.target <= 0) { this.el.pause(); this.el.currentTime = 0; } })
+        .catch(() => {})
+        .finally(() => { this.el.muted = false; });
+    };
+    addEventListener('pointerdown', prime, true);
+    addEventListener('keydown', prime, true);
   }
 
   /** whether it sounds (or still fades out) */

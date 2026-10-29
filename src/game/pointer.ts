@@ -52,6 +52,10 @@ export class PointerControl {
     } catch { /* storage blocked */ }
     dom.addEventListener('click', () => { if (!this.locked && this.settings.clickCapture) this.capture(); });
     document.addEventListener('pointerlockchange', () => this.setLocked(document.pointerLockElement === dom));
+    // Safari keeps the first Esc for itself while the pointer is captured: the page gets only its keyup, and the
+    // pointer stays captured until a second press (measured in Safari 27). Let it go on that keyup (elsewhere the
+    // browser has let it go by then)
+    addEventListener('keyup', (e) => { if (e.code === 'Escape' && this.locked) this.release(); });
     document.addEventListener('mousemove', (e) => { if (this.locked) this.onMove(e.movementX, e.movementY); });
     dom.addEventListener('mousedown', (e) => { if (this.locked) this.onButton(e.button, true, e.ctrlKey); });
     addEventListener('mouseup', (e) => { if (this.locked) this.onButton(e.button, false, e.ctrlKey); });
