@@ -1,7 +1,7 @@
-Seezielrakete im Anflug!
+Achtung: Zielrakete im Anflug!
 
-Der Feind setzt eine Baukapsel ab.
+Feindliche Baukapsel abgesetzt.
 
-Anti-ship missile inbound!
+Warning! Anti-ship missile inbound!
 
 Enemy build pod landing.

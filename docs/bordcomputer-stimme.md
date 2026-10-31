@@ -21,7 +21,7 @@ Priorität 1 hat Vorrang vor allem anderen, Priorität 3 entfällt, wenn gerade 
 | ID | Deutsch | English | Auslöser | Prio |
 |---|---|---|---|---|
 | `rakete-anflug` | Rakete im Anflug! | Missile inbound! | erste feindliche Rakete auf die gesteuerte Einheit (heute der schnelle Warnton) | 1 |
-| `hammerhead-anflug` | Seezielrakete im Anflug! (aufgenommen: „Hammerhead im Anflug!“) | Anti-ship missile inbound! (aufgenommen: „Hammerhead inbound!“) | `hammer.incoming` | 1 |
+| `hammerhead-anflug` | Achtung: Zielrakete im Anflug! | Warning! Anti-ship missile inbound! | `hammer.incoming` | 1 |
 | `schiff-beschuss` | Wir werden beschossen! | We are under fire! | `foe.shipHit` | 1 |
 | `schiff-schaden` | Schwere Schäden am Schiff! | Heavy damage to the ship! | neu: Panzerung der Stoorworm unter 30 % | 1 |
 | `schiff-sinkt` | Die Stoorworm sinkt. | The Stoorworm is sinking. | `end.shipSinking` | 1 |
@@ -30,7 +30,7 @@ Priorität 1 hat Vorrang vor allem anderen, Priorität 3 entfällt, wenn gerade 
 | `insel-angriff` | Eine unserer Inseln wird angegriffen. | One of our islands is under attack. | `foe.attack` | 2 |
 | `feind-traeger` | Feindlicher Träger gesichtet. | Enemy carrier sighted. | `enemy.sighted` | 2 |
 | `feind-traeger-weg` | Kontakt zum feindlichen Träger verloren. | Contact with the enemy carrier lost. | `enemy.lost` | 3 |
-| `feind-accb` | Der Feind setzt eine Baukapsel ab. (aufgenommen: „… eine ACCB ab.“) | Enemy build pod landing. (aufgenommen: „Enemy ACCB landing.“) | `foe.accb` | 2 |
+| `feind-accb` | Feindliche Baukapsel abgesetzt. | Enemy build pod landing. | `foe.accb` | 2 |
 | `feind-beobachter` | Feindliche Zielsonde gestartet. | Enemy spotter pod launched. | `observer.foeUp` | 3 |
 | `feind-insel` | Der Feind hat eine Insel eingenommen. | The enemy has taken an island. | `foe.islandTaken` | 2 |
 | `skua-verloren` | Skua verloren. | Skua lost. | `kill.unitLost` (Skua) | 2 |
@@ -110,7 +110,7 @@ Zusammen 33 + 13 + 2 + 3 − 1 = 50 Sätze, also 100 Dateien.
 
 ### Neue Namen (31.10.2026)
 
-Die Waffennamen aus dem Original sind ersetzt (Seezielrakete statt Hammerhead, Baukapsel statt ACCB, Drohnen-Rakete statt Harbinger, Lenkrakete statt Assassin, Virus-Kapsel statt Virus-Bombe), die Gegner-KI heißt Cailleach statt Omega. Zwei Sätze nennen noch die alten Namen und sind neu einzusprechen: `hammerhead-anflug` und `feind-accb`, die Texte stehen in `docs/stimme-saetze-namen.txt`, erst Deutsch, dann Englisch. Bis dahin spielen die alten Aufnahmen. Die IDs der Dateien bleiben. Solange eine Datei fehlt, überspringt der Bordcomputer den Satz, statt die Schlange aufzuhalten.
+Die Waffennamen aus dem Original sind ersetzt (Seezielrakete statt Hammerhead, Baukapsel statt ACCB, Drohnen-Rakete statt Harbinger, Lenkrakete statt Assassin, Virus-Kapsel statt Virus-Bombe), die Gegner-KI heißt Cailleach statt Omega. Die zwei Sätze mit den alten Namen, `hammerhead-anflug` und `feind-accb`, sind am selben Tag neu aufgenommen, vom Spieler leicht abgewandelt: „Achtung: Zielrakete im Anflug!“ und „Feindliche Baukapsel abgesetzt.“ bzw. „Warning! Anti-ship missile inbound!“ und „Enemy build pod landing.“ (die Stimme sagt „Zielrakete“, der Spieltext bleibt bei „Seezielrakete“). Sie kamen als eine Datei je Sprache und sind an der längsten Pause geschnitten (die kurze Pause nach „Achtung:“ bzw. dem ersten englischen Wort bleibt im Satz), mit 10 ms Ein- und 30 ms Ausblendung, auf −20 LUFS angeglichen (−20,1 bis −20,7 gemessen, Spitzen höchstens −1,3 dBFS), Opus 48 kHz mono. Die IDs der Dateien bleiben. Solange eine Datei fehlt, überspringt der Bordcomputer den Satz, statt die Schlange aufzuhalten.
 
 ## Im Spiel
 
