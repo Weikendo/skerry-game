@@ -51,7 +51,7 @@ npm run app:mac    # Mac-App für Apple Silicon nach release/ (app:win für Wind
 
 MIT, siehe [LICENSE](LICENSE). Das gilt für den Code ebenso wie für Bilder, Musik, 3D-Modelle und die Stimme. Die eingebundenen Klangaufnahmen sind gemeinfrei (CC0).
 
-Skerry ist ein inoffizielles Fan-Remake. Es ist kein Produkt der Rechteinhaber von „Carrier Command“ (Realtime Games Software, veröffentlicht von Rainbird) und nicht mit ihnen verbunden. „Carrier Command“ ist eine Marke ihres jeweiligen Inhabers. Das Spiel enthält keine Grafiken, Modelle, Klänge oder Dateien aus dem Original.
+Skerry ist ein unabhängiges, inoffizielles Fanprojekt. Es ist kein Produkt der Rechteinhaber von „Carrier Command“ (Realtime Games Software, veröffentlicht von Rainbird) und nicht mit ihnen verbunden. „Carrier Command“ ist eine Marke ihres jeweiligen Inhabers. Das Spiel enthält keine Grafiken, Modelle, Klänge oder Dateien aus dem Original.
 
 ---
 
@@ -105,4 +105,4 @@ npm run app:mac    # Mac app for Apple Silicon to release/ (app:win for Windows)
 
 MIT, see [LICENSE](LICENSE). It covers the code as well as the images, music, 3D models and voice. The included sound recordings are in the public domain (CC0).
 
-Skerry is an unofficial fan remake. It is not a product of, nor affiliated with, the rights holders of “Carrier Command” (Realtime Games Software, published by Rainbird). “Carrier Command” is a trademark of its respective owner. The game contains no graphics, models, sounds or files from the original.
+Skerry is an independent, unofficial fan project. It is not a product of, nor affiliated with, the rights holders of “Carrier Command” (Realtime Games Software, published by Rainbird). “Carrier Command” is a trademark of its respective owner. The game contains no graphics, models, sounds or files from the original.
