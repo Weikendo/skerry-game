@@ -4,7 +4,7 @@ import { GlowSet, type GlowPoints } from '../engine/glow';
 import { PAL } from '../engine/palette';
 import { glbModel } from './glb';
 
-// Walrus amphibious assault vehicle after the original (model 6): a wedge-shaped
+// The Otter amphibious assault vehicle (internally `walrus`), in the spirit of the original's: a wedge-shaped
 // hull with an ochre top and grey sloped sides over two track units (the tracks
 // double as the hull in the water). Detailed for the remake: moving tracks with
 // road wheels, sprocket and idler, a faceted turret with the twin Avatar laser

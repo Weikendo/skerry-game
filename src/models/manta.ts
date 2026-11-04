@@ -4,7 +4,7 @@ import { PAL } from '../engine/palette';
 import { GlowSet, type GlowPoints } from '../engine/glow';
 import { glbModel } from './glb';
 
-// Manta multi-role fighter after the original (model 5): a cranked delta with a
+// The Skua multi-role fighter (internally `manta`), in the spirit of the original's: a cranked delta with a
 // single fin, grey back, orange-red flanks and light blue-grey wings. Detailed
 // for the remake: canopy frame, intakes, twin nozzles, moving elevons and
 // rudder, retracting gear and the Assassin missiles on their pylons.

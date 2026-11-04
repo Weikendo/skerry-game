@@ -7,7 +7,7 @@ import { glbCamera, glbModel, triangleCount } from './glb';
 let glows = new GlowSet();
 
 // The carriers. The player's Stoorworm is built in Blender (art/stoorworm, loaded by glb.ts).
-// The enemy's is built here after the original model (1 original unit = 0.1 m): deck
+// The enemy's is built here, in the proportions of the original's carrier: deck
 // 80 x 200 m, ski ramp at the bow, Walrus dock in the stern; a steel ship standing high out
 // of the water (20 m freeboard), its hull a faceted wedge that flares out under the deck
 // edge, narrows to the keel and runs out into a sharp prow; lit hangar bays along the sides.
@@ -30,7 +30,7 @@ const BASE_COL = {
   accentLight: PAL.lichtBlau,
 };
 type Colours = Record<keyof typeof BASE_COL, string>;
-// ACC Omega, the enemy's carrier (the remake's Nuckelavee): anthracite with violet trim,
+// The Nuckelavee, the enemy's carrier: anthracite with violet trim,
 // red-lit windows and a raked island on the starboard edge
 const ENEMY_COL: Colours = {
   ...BASE_COL,

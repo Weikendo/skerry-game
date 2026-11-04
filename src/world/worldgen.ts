@@ -54,8 +54,8 @@ export const LARGE_R = 900;
 
 /**
  * Random archipelago from a seed, following the rules found in the original:
- * - player base Vulcan in the south-west corner, enemy base Nemesis in the
- *   north-east corner, a big hub (Fulcrum) in the middle;
+ * - the player's base in the south-west corner, the enemy's in the north-east
+ *   corner, a big hub in the middle;
  * - islands as a loose Poisson-disk scatter, with sparse patches of open sea so
  *   that some islands become outposts;
  * - a supply network: relative neighbourhood graph plus some Gabriel edges,
@@ -93,7 +93,7 @@ export function generateWorld(o: WorldOptions): WorldPlan {
   };
   // about 2/3 large islands as in the original
   const radius = () => 700 + Math.pow(rnd(), 0.9) * 600;
-  // a few far outposts (4 of 64 in the original: Splinter, Bountybar, Medusa, Isolus)
+  // a few far outposts (4 of 64 in the original)
   const outposts = count >= 12 ? Math.round(count / 16) : 0;
   let tries = 0;
   const maxTries = count * 800;

@@ -3,10 +3,9 @@ import { LowPolyBuilder, type V3 } from '../engine/lowpoly';
 import { PAL } from '../engine/palette';
 import { t } from '../i18n';
 
-// Island structures, loosely after the original object set: domed command
-// centre (43), lattice mast (48), round hangar (50), factory with chimney (51),
-// tank (52), warehouse (47), the rotating gun turret (44), bunker (45/46) and
-// the defence dome (43). Origin = centre of
+// Island structures in the spirit of the original's: domed command centre,
+// lattice mast, round hangar, factory with chimney, tank, warehouse, the
+// rotating gun turret, bunker and the defence dome. Origin = centre of
 // the footprint on the foundation top; +z faces the command centre.
 
 export type BuildingType = 'kommandozentrale' | 'funkmast' | 'hangar' | 'fabrik' | 'tanklager' | 'geschuetzturm' | 'lagerhalle' | 'bunker' | 'kuppel' | 'landeplatz';

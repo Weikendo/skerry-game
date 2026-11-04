@@ -16,11 +16,10 @@ import { enemyTint } from '../models/tint';
 export interface PlacedBuilding { type: BuildingType; x: number; y: number; z: number; rot: number; r: number }
 
 type Quota = Partial<Record<BuildingType, number>>;
-// Buildings per island role and size, after the original quota table, mapped
-// onto the remake's buildings: dome 43 →
-// kuppel, turret 44 → geschuetzturm, red 45 + blue 46 bunker → bunker, lattice
-// mast 48 → funkmast, water tower 49 → lagerhalle, round hangar 50 → hangar,
-// factory 51 → fabrik, tank 52 → tanklager. The runway becomes a landing pad
+// Buildings per island role and size, after the original's mix, mapped onto the
+// remake's buildings: defence dome → kuppel, gun turret → geschuetzturm, red and
+// blue bunker → bunker, lattice mast → funkmast, water tower → lagerhalle, round
+// hangar → hangar, factory → fabrik, tank → tanklager. The runway becomes a landing pad
 // (the remake's Skua is a VTOL): on the base, resource islands and large defence
 // islands, as the manual says, for refuelling away from the ship.
 const BASIS: Quota = { hangar: 1, kuppel: 1, geschuetzturm: 2, bunker: 4, funkmast: 1, landeplatz: 1 };

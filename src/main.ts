@@ -240,7 +240,7 @@ const pointer = new PointerControl(renderer.domElement, () => started && !menu.o
 const keysHeldOnly: InputLike = { down: (...c) => input.keysOnly.down(...c), hit: () => false, axis: (n, p) => input.keysOnly.axis(n, p) };
 /** nothing pressed (while the victory's film runs) */
 const NO_INPUT: InputLike = { down: () => false, hit: () => false, axis: () => 0 };
-// start off the south coast of the home island (Vulcan), half speed eastwards
+// start off the south coast of the home island, half speed eastwards
 const home = world.islands[0];
 const carrier = new CarrierController(carrierModel, world, env, {
   x: home.cx - 400, z: home.cz + home.size * 0.5 + 700, heading: Math.PI / 2, throttle: 3,
