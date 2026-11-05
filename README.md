@@ -13,6 +13,13 @@ Skerry ist ein Strategie- und Actionspiel auf hoher See, eine Hommage an **Carri
 | ![Die Stoorworm in der Außenansicht](docs/screenshots/stoorworm.jpg) | ![Ein Otter fährt ins Heckdock](docs/screenshots/otter-heckdock.jpg) |
 | ![Aus der Skua im Anflug auf eine Insel](docs/screenshots/skua-insel.jpg) | ![Die Karte als Kommandopult](docs/screenshots/karte.jpg) |
 
+## Über das Projekt
+
+Skerry ist ein unabhängiges, nichtkommerzielles Fanprojekt und eine Hommage an „Carrier Command“ (1988, Realtime Games). Es ist nicht mit den Rechteinhabern des Originals verbunden.
+
+Idee, Gestaltung und Tests: Christian Weikert. Programmiert mit [Claude Code](https://claude.com/claude-code).  
+Ein Hobbyprojekt: Fehlerberichte und Vorschläge sind willkommen, Antworten kommen, wenn ich Zeit habe.
+
 ## Spielen
 
 - Läuft im Browser, direkt unter [weikendo.github.io/skerry-game](https://weikendo.github.io/skerry-game/) (am besten Chrome oder Edge auf Mac oder PC), und als Mac- oder Windows-App zum Selbstbauen.
@@ -66,6 +73,11 @@ Skerry is a strategy and action game on the high seas, a homage to **Carrier Com
 | ![The Stoorworm and an Otter seen from the drone](docs/screenshots/en-drone.jpg) | ![An Otter returning to the stern dock](docs/screenshots/en-otter-stern-dock.jpg) |
 
 ![The map as the command table, with the stockpile island's delivery range](docs/screenshots/en-map.jpg)
+
+### About
+
+Idea, design and testing by Christian Weikert. Written with Claude Code.  
+A hobby project: bug reports and suggestions are welcome; I'll reply when I can.
 
 ### Playing
 
