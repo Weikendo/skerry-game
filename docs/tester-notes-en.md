@@ -2,12 +2,12 @@
 
 Thanks for trying Skerry! Skerry is a strategy and action game on the high seas: you command the aircraft carrier Stoorworm, capture islands with amphibious tanks and VTOL jets, build up a supply network and fight the enemy carrier Nuckelavee.
 
-**Version:** It is shown at the bottom of the main menu, for example “Version 0.9.0 · 23/10/2026”. Please include it with every report.
+**Version:** It is shown at the bottom of the main menu, for example “Version 0.11.0 · 05/11/26, 14:30 · …”. Please include it with every report.
 
 ## Getting started
 
-- **In the browser (recommended):** Open the link, ideally in **Chrome** or **Edge** on a Mac or Windows PC. Safari and Firefox have not been tested yet; phones and tablets are not supported. Music and sound start after the first click or key press.
-- **As a Mac app:** Unzip the file, drag Skerry into the Applications folder and open it. The “AppleSilicon” file is for Macs with M1 or later, “Intel” for older Macs. On the first start macOS blocks the app because it is not registered with Apple. Then click **“Open Anyway”** under **System Settings → Privacy & Security**.
+- **In the browser (recommended):** Open the link, ideally in **Chrome** or **Edge** on a Mac or Windows PC; **Safari** works too. Firefox has not been tested yet; phones and tablets are not supported. Music and sound start after the first click or key press.
+- **As a Mac app:** Unzip the file, drag Skerry into the Applications folder and open it. The app runs on Macs with Apple silicon (M1 or later) and macOS 13 Ventura or later. On the first start macOS blocks the app because it is not registered with Apple. Then click **“Open Anyway”** under **System Settings → Privacy & Security**.
 
 The game generates its island world at start-up; this takes a few seconds.
 

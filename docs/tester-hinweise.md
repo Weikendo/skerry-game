@@ -2,12 +2,12 @@
 
 Danke, dass du Skerry ausprobierst! Skerry ist ein Strategie- und Actionspiel auf hoher See: Du führst den Flugzeugträger Stoorworm, eroberst mit Amphibienpanzern und Senkrechtstartern Inseln, baust ein Nachschubnetz auf und kämpfst gegen den feindlichen Träger Nuckelavee.
 
-**Version:** Sie steht im Hauptmenü unten, zum Beispiel „Version 0.9.0 · 23.10.2026“. Bitte gib sie bei jeder Rückmeldung an.
+**Version:** Sie steht im Hauptmenü unten, zum Beispiel „Version 0.11.0 · 5.11.26, 14:30 · …“. Bitte gib sie bei jeder Rückmeldung an.
 
 ## Starten
 
-- **Im Browser (empfohlen):** Den Link öffnen, am besten in **Chrome** oder **Edge** auf einem Mac oder Windows-PC. Safari und Firefox sind noch nicht getestet, Smartphones und Tablets werden nicht unterstützt. Musik und Ton beginnen nach dem ersten Klick oder Tastendruck.
-- **Als Mac-App:** Das Zip entpacken, Skerry in den Programme-Ordner ziehen und öffnen. Die Datei „AppleSilicon“ ist für Macs ab M1, „Intel“ für ältere Macs. Beim ersten Start blockiert macOS die App, weil sie nicht bei Apple registriert ist. Dann unter **Systemeinstellungen → Datenschutz & Sicherheit** auf **„Dennoch öffnen“** klicken.
+- **Im Browser (empfohlen):** Den Link öffnen, am besten in **Chrome** oder **Edge** auf einem Mac oder Windows-PC; **Safari** geht auch. Firefox ist noch nicht getestet, Smartphones und Tablets werden nicht unterstützt. Musik und Ton beginnen nach dem ersten Klick oder Tastendruck.
+- **Als Mac-App:** Das Zip entpacken, Skerry in den Programme-Ordner ziehen und öffnen. Die App läuft auf Macs mit Apple-Chip (M1 oder neuer) ab macOS 13 Ventura. Beim ersten Start blockiert macOS die App, weil sie nicht bei Apple registriert ist. Dann unter **Systemeinstellungen → Datenschutz & Sicherheit** auf **„Dennoch öffnen“** klicken.
 
 Beim Start erzeugt das Spiel seine Inselwelt, das dauert ein paar Sekunden.
 
