@@ -121,8 +121,8 @@ function berth(world: Archipelago, isl: Island, fromX: number, fromZ: number): {
 const v3 = new THREE.Vector3(), vel = new THREE.Vector3();
 
 /**
- * Omega, the enemy's strategy (named after the original's enemy carrier ACC
- * Omega). Every few seconds it picks an operation for its ship and one Otter:
+ * Omega, the enemy's strategy (the AI the game calls Cailleach). Every few
+ * seconds it picks an operation for its ship and one Otter:
  * found a base on a neutral island next to its network (those towards the
  * player first), or knock out the command centre of a weakly defended island
  * of the player's so the island falls and can be taken; with nothing neutral
